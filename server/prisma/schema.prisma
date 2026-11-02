@@ -1,0 +1,357 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  PAYPAL
+  BANK_TRANSFER
+  CASH
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum LoanType {
+  LENT
+  BORROWED
+}
+
+enum LoanStatus {
+  ACTIVE
+  FULLY_REPAID
+  OVERDUE
+}
+
+enum InvestmentCategory {
+  IPO
+  STOCKS
+  MUTUAL_FUNDS
+  ETFS
+  BONDS
+  OTHER
+}
+
+enum OpportunityStatus {
+  CONFIRMED
+  ANNOUNCED
+  RUMOURED
+  UNVERIFIED
+  CLOSED
+}
+
+enum NotificationType {
+  INVOICE_DUE
+  INVOICE_OVERDUE
+  LOAN_REPAYMENT_DUE
+  LENT_MONEY_RECOVERY
+  SAVINGS_GOAL_ALERT
+  INVESTMENT_UPDATE
+  WEEKLY_SUMMARY
+  PAYMENT_RECEIVED
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  LOAN_DISBURSEMENT
+  LOAN_REPAYMENT
+  SAVINGS_DEPOSIT
+}
+
+model User {
+  id                      String                  @id @default(uuid())
+  email                   String                  @unique
+  passwordHash            String
+  name                    String
+  businessName            String?                 @default("Freelance Studio")
+  currency                String                  @default("INR")
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  clients                 Client[]
+  projects                Project[]
+  invoices                Invoice[]
+  payments                Payment[]
+  paypalTransactions      PayPalTransaction[]
+  loans                   Loan[]
+  investmentOpportunities InvestmentOpportunity[]
+  savingsGoals            SavingsGoal[]
+  notifications           Notification[]
+  transactions            Transaction[]
+  aiInsights              AIInsight[]
+
+  @@map("users")
+}
+
+model Client {
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  email           String
+  phone           String?
+  company         String?
+  projectDetails  String?
+  contractAmount  Float         @default(0)
+  startDate       DateTime?
+  deadline        DateTime?
+  projectStatus   String        @default("Active") // Active, Completed, On Hold
+  paymentStatus   String        @default("Pending") // Pending, Partially Paid, Paid
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  projects        Project[]
+  invoices        Invoice[]
+
+  @@map("clients")
+}
+
+model Project {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String?
+  client        Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  title         String
+  description   String?
+  budget        Float         @default(0)
+  deadline      DateTime?
+  status        String        @default("In Progress") // Planning, In Progress, Review, Completed
+  deliverables  String?       // JSON or text list of deliverables
+  milestones    String?       // JSON or text list of milestones
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("projects")
+}
+
+model Invoice {
+  id                  String             @id @default(uuid())
+  userId              String
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId            String
+  client              Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  invoiceNumber       String             @unique
+  issueDate           DateTime           @default(now())
+  dueDate             DateTime
+  status              InvoiceStatus      @default(PENDING)
+  subtotal            Float              @default(0)
+  taxRate             Float              @default(0)
+  taxAmount           Float              @default(0)
+  discountAmount      Float              @default(0)
+  totalAmount         Float              @default(0)
+  paidAmount          Float              @default(0)
+  notes               String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  items               InvoiceItem[]
+  payments            Payment[]
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float    @default(0)
+  amount      Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  @@map("invoice_items")
+}
+
+model Payment {
+  id                 String              @id @default(uuid())
+  invoiceId          String
+  invoice            Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount             Float
+  paymentMethod      PaymentMethod       @default(PAYPAL)
+  transactionId      String?             // External ID or PayPal capture ID
+  status             PaymentStatus       @default(PENDING)
+  paidAt             DateTime?
+  createdAt          DateTime            @default(now())
+
+  paypalTransactions PayPalTransaction[]
+
+  @@map("payments")
+}
+
+model PayPalTransaction {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentId     String?
+  payment       Payment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  orderId       String        @unique // PayPal Order ID
+  captureId     String?       @unique // PayPal Capture ID
+  payerEmail    String?
+  payerId       String?
+  amount        Float
+  currency      String        @default("USD")
+  status        String        // CREATED, APPROVED, COMPLETED, FAILED
+  rawResponse   String?       // JSON representation of PayPal response
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("paypal_transactions")
+}
+
+model Transaction {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        TransactionType
+  category    String          // Freelance Income, Software Tools, Office, Travel, etc.
+  description String
+  amount      Float
+  date        DateTime        @default(now())
+  referenceId String?         // Optional reference to invoice or loan
+  createdAt   DateTime        @default(now())
+
+  @@map("transactions")
+}
+
+model Loan {
+  id              String          @id @default(uuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            LoanType        // LENT or BORROWED
+  partyName       String          // Person's name who borrowed or lent
+  contactInfo     String?         // Email, phone
+  principalAmount Float
+  interestRate    Float           @default(0) // Percentage per annum or flat
+  amountRepaid    Float           @default(0)
+  remainingAmount Float
+  startDate       DateTime        @default(now())
+  dueDate         DateTime?
+  status          LoanStatus      @default(ACTIVE)
+  notes           String?
+  attachmentUrl   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  repayments      LoanRepayment[]
+
+  @@map("loans")
+}
+
+model LoanRepayment {
+  id            String   @id @default(uuid())
+  loanId        String
+  loan          Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  amount        Float
+  repaymentDate DateTime @default(now())
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@map("loan_repayments")
+}
+
+model InvestmentOpportunity {
+  id             String             @id @default(uuid())
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName    String
+  logoUrl        String?
+  category       InvestmentCategory @default(IPO)
+  description    String?
+  expectedAmount Float              @default(0)
+  targetDate     DateTime?
+  openingDate    DateTime?
+  closingDate    DateTime?
+  listingDate    DateTime?
+  priceBand      String?            // e.g. "₹450 - ₹480"
+  lotSize        Int?               // e.g. 30 shares
+  infoUrl        String?
+  status         OpportunityStatus  @default(UNVERIFIED)
+  isVerified     Boolean            @default(false)
+  officialSource String?
+  lastVerifiedAt DateTime?
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@map("investment_opportunities")
+}
+
+model SavingsGoal {
+  id            String                @id @default(uuid())
+  userId        String
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title         String
+  targetAmount  Float
+  currentAmount Float                 @default(0)
+  targetDate    DateTime
+  category      String?               @default("Investment") // IPO, Emergency Fund, Tax, Equipment
+  isCompleted   Boolean               @default(false)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  contributions SavingsContribution[]
+
+  @@map("savings_goals")
+}
+
+model SavingsContribution {
+  id               String      @id @default(uuid())
+  goalId           String
+  goal             SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  amount           Float
+  contributionDate DateTime    @default(now())
+  sourceNotes      String?
+  createdAt        DateTime    @default(now())
+
+  @@map("savings_contributions")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  @@map("notifications")
+}
+
+model AIInsight {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    String   // Cashflow, Savings, Risk, Invoice Alert
+  title       String
+  summary     String
+  actionItems String?  // JSON or bullet points
+  createdAt   DateTime @default(now())
+
+  @@map("ai_insights")
+}
