@@ -3,6 +3,7 @@ export interface User {
   email: string;
   name: string;
   businessName?: string;
+  role?: 'USER' | 'ADMIN' | string;
   currency: string;
 }
 

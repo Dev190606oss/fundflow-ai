@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient, InvoiceStatus, PaymentMethod, PaymentStatus, LoanType, LoanStatus, InvestmentCategory, OpportunityStatus, NotificationType, TransactionType } from '@prisma/client';
+import { PrismaClient, Role, InvoiceStatus, PaymentMethod, PaymentStatus, LoanType, LoanStatus, InvestmentCategory, OpportunityStatus, NotificationType, TransactionType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -34,11 +34,26 @@ async function main() {
       passwordHash,
       name: 'Alex Mercer',
       businessName: 'Vanguard Engineering & Design',
+      role: Role.USER,
+      currency: 'INR',
+    },
+  });
+
+  // Create System Admin User
+  const adminPasswordHash = await bcrypt.hash('AdminPass2026!', salt);
+  const adminUser = await prisma.user.create({
+    data: {
+      email: 'admin@fundflow.ai',
+      passwordHash: adminPasswordHash,
+      name: 'FundFlow System Admin',
+      businessName: 'FundFlow Operations Hub',
+      role: Role.ADMIN,
       currency: 'INR',
     },
   });
 
   console.log(`👤 Created Demo User: ${user.email} (${user.id})`);
+  console.log(`🛡️ Created Admin User: ${adminUser.email} (${adminUser.id})`);
 
   // 2. Create 3 Clients
   const client1 = await prisma.client.create({

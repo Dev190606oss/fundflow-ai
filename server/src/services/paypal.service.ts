@@ -156,6 +156,25 @@ export class PayPalService {
       throw new Error('Invoice not found or unauthorized.');
     }
 
+    // Idempotency Protection: Check if this PayPal order was already captured
+    const existingTx = await prisma.payPalTransaction.findUnique({
+      where: { orderId },
+      include: { payment: { include: { invoice: { include: { client: true, items: true } } } } },
+    });
+
+    if (existingTx && existingTx.status === 'COMPLETED') {
+      return {
+        success: true,
+        captureId: existingTx.captureId || '',
+        status: 'COMPLETED',
+        invoice: existingTx.payment?.invoice || invoice,
+      };
+    }
+
+    if (invoice.status === InvoiceStatus.PAID) {
+      throw new Error('This invoice has already been fully paid and settled.');
+    }
+
     let captureId = `CAPTURE-SANDBOX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
     let payerEmail = `${invoice.client.email}`;
     let payerId = `PAYER-SB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;

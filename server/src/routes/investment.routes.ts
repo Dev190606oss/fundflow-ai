@@ -3,10 +3,16 @@ import prisma from '../prisma';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { InvestmentCategory, OpportunityStatus } from '@prisma/client';
 import { AIService } from '../services/ai.service';
+import {
+  validateBody,
+  createOpportunitySchema,
+  createGoalSchema,
+  createContributionSchema,
+} from '../middleware/validate.middleware';
 
 const router = Router();
 
-// 1. Get Investment Watchlist & IPOs
+// 1. Get Investment Watchlist & IPOs for authenticated user
 router.get('/watchlist', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const opportunities = await prisma.investmentOpportunity.findMany({
@@ -27,9 +33,68 @@ router.get('/watchlist', requireAuth, async (req: AuthenticatedRequest, res: Res
   }
 });
 
-// Create investment watchlist opportunity
-router.post('/watchlist', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// Create investment watchlist opportunity (Strict Zod validation)
+router.post(
+  '/watchlist',
+  requireAuth,
+  validateBody(createOpportunitySchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const {
+        companyName,
+        logoUrl,
+        category,
+        description,
+        expectedAmount,
+        targetDate,
+        priceBand,
+        lotSize,
+        infoUrl,
+        status,
+        isVerified,
+        officialSource,
+        notes,
+      } = req.body;
+
+      const opportunity = await prisma.investmentOpportunity.create({
+        data: {
+          userId: req.userId!,
+          companyName: companyName.trim(),
+          logoUrl: logoUrl ? logoUrl.trim() : null,
+          category: category as InvestmentCategory,
+          description: description ? description.trim() : null,
+          expectedAmount: Math.max(0, Number(expectedAmount) || 0),
+          targetDate: targetDate ? new Date(targetDate) : null,
+          priceBand: priceBand ? priceBand.trim() : null,
+          lotSize: lotSize ? Math.max(1, Number(lotSize)) : null,
+          infoUrl: infoUrl ? infoUrl.trim() : null,
+          status: status as OpportunityStatus,
+          isVerified: Boolean(isVerified),
+          officialSource: officialSource ? officialSource.trim() : null,
+          lastVerifiedAt: new Date(),
+          notes: notes ? notes.trim() : null,
+        },
+      });
+
+      res.status(201).json(opportunity);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create opportunity.' });
+    }
+  }
+);
+
+// Update investment opportunity (Prevents mass assignment and IDOR)
+router.put('/watchlist/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    const existing = await prisma.investmentOpportunity.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Opportunity not found or unauthorized.' });
+      return;
+    }
+
     const {
       companyName,
       logoUrl,
@@ -46,52 +111,23 @@ router.post('/watchlist', requireAuth, async (req: AuthenticatedRequest, res: Re
       notes,
     } = req.body;
 
-    if (!companyName) {
-      res.status(400).json({ error: 'Company name is required.' });
-      return;
-    }
-
-    const opportunity = await prisma.investmentOpportunity.create({
-      data: {
-        userId: req.userId!,
-        companyName,
-        logoUrl: logoUrl || null,
-        category: (category as InvestmentCategory) || InvestmentCategory.IPO,
-        description: description || null,
-        expectedAmount: Number(expectedAmount) || 0,
-        targetDate: targetDate ? new Date(targetDate) : null,
-        priceBand: priceBand || null,
-        lotSize: lotSize ? Number(lotSize) : null,
-        infoUrl: infoUrl || null,
-        status: (status as OpportunityStatus) || OpportunityStatus.UNVERIFIED,
-        isVerified: Boolean(isVerified),
-        officialSource: officialSource || null,
-        lastVerifiedAt: new Date(),
-        notes: notes || null,
-      },
-    });
-
-    res.status(201).json(opportunity);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create opportunity.' });
-  }
-});
-
-// Update investment opportunity
-router.put('/watchlist/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const existing = await prisma.investmentOpportunity.findFirst({
-      where: { id: req.params.id, userId: req.userId },
-    });
-
-    if (!existing) {
-      res.status(404).json({ error: 'Opportunity not found.' });
-      return;
-    }
-
     const updated = await prisma.investmentOpportunity.update({
-      where: { id: req.params.id },
-      data: req.body,
+      where: { id: existing.id },
+      data: {
+        ...(companyName && { companyName: String(companyName).trim() }),
+        ...(logoUrl !== undefined && { logoUrl: logoUrl ? String(logoUrl).trim() : null }),
+        ...(category && { category: category as InvestmentCategory }),
+        ...(description !== undefined && { description: description ? String(description).trim() : null }),
+        ...(expectedAmount !== undefined && { expectedAmount: Math.max(0, Number(expectedAmount)) }),
+        ...(targetDate !== undefined && { targetDate: targetDate ? new Date(targetDate) : null }),
+        ...(priceBand !== undefined && { priceBand: priceBand ? String(priceBand).trim() : null }),
+        ...(lotSize !== undefined && { lotSize: lotSize ? Number(lotSize) : null }),
+        ...(infoUrl !== undefined && { infoUrl: infoUrl ? String(infoUrl).trim() : null }),
+        ...(status && { status: status as OpportunityStatus }),
+        ...(isVerified !== undefined && { isVerified: Boolean(isVerified) }),
+        ...(officialSource !== undefined && { officialSource: officialSource ? String(officialSource).trim() : null }),
+        ...(notes !== undefined && { notes: notes ? String(notes).trim() : null }),
+      },
     });
 
     res.json(updated);
@@ -100,7 +136,7 @@ router.put('/watchlist/:id', requireAuth, async (req: AuthenticatedRequest, res:
   }
 });
 
-// Delete opportunity
+// Delete opportunity (Enforces ownership)
 router.delete('/watchlist/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const existing = await prisma.investmentOpportunity.findFirst({
@@ -108,11 +144,11 @@ router.delete('/watchlist/:id', requireAuth, async (req: AuthenticatedRequest, r
     });
 
     if (!existing) {
-      res.status(404).json({ error: 'Opportunity not found.' });
+      res.status(404).json({ error: 'Opportunity not found or unauthorized.' });
       return;
     }
 
-    await prisma.investmentOpportunity.delete({ where: { id: req.params.id } });
+    await prisma.investmentOpportunity.delete({ where: { id: existing.id } });
     res.json({ message: 'Opportunity removed.' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete opportunity.' });
@@ -160,108 +196,110 @@ router.get('/goals', requireAuth, async (req: AuthenticatedRequest, res: Respons
   }
 });
 
-// Create savings goal
-router.post('/goals', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { title, targetAmount, initialDeposit, targetDate, category } = req.body;
+// Create savings goal (Strict validation)
+router.post(
+  '/goals',
+  requireAuth,
+  validateBody(createGoalSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { title, targetAmount, initialDeposit, targetDate, category } = req.body;
 
-    if (!title || !targetAmount || !targetDate) {
-      res.status(400).json({ error: 'Title, target amount, and target date are required.' });
-      return;
-    }
+      const target = Math.max(1, Number(targetAmount));
+      const initial = Math.max(0, Number(initialDeposit) || 0);
 
-    const initial = Number(initialDeposit) || 0;
-
-    const goal = await prisma.$transaction(async (tx) => {
-      const newGoal = await tx.savingsGoal.create({
-        data: {
-          userId: req.userId!,
-          title,
-          targetAmount: Number(targetAmount),
-          currentAmount: initial,
-          targetDate: new Date(targetDate),
-          category: category || 'Investment Readiness',
-        },
-      });
-
-      if (initial > 0) {
-        await tx.savingsContribution.create({
+      const goal = await prisma.$transaction(async (tx) => {
+        const newGoal = await tx.savingsGoal.create({
           data: {
-            goalId: newGoal.id,
-            amount: initial,
-            contributionDate: new Date(),
-            sourceNotes: 'Initial seed allocation',
+            userId: req.userId!,
+            title: title.trim(),
+            targetAmount: target,
+            currentAmount: initial,
+            targetDate: new Date(targetDate),
+            category: category ? category.trim() : 'Investment Readiness',
           },
         });
+
+        if (initial > 0) {
+          await tx.savingsContribution.create({
+            data: {
+              goalId: newGoal.id,
+              amount: initial,
+              contributionDate: new Date(),
+              sourceNotes: 'Initial seed allocation',
+            },
+          });
+        }
+
+        return newGoal;
+      });
+
+      res.status(201).json(goal);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create savings goal.' });
+    }
+  }
+);
+
+// Add contribution to savings goal (ONLY confirmed funds, strict ownership check)
+router.post(
+  '/goals/:id/contributions',
+  requireAuth,
+  validateBody(createContributionSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { amount, sourceNotes } = req.body;
+      const goalId = req.params.id;
+      const contributionAmount = Math.round(Number(amount) * 100) / 100;
+
+      // Ownership check protects against cross-user contributions
+      const goal = await prisma.savingsGoal.findFirst({
+        where: { id: goalId, userId: req.userId },
+      });
+
+      if (!goal) {
+        res.status(404).json({ error: 'Savings goal not found or unauthorized.' });
+        return;
       }
 
-      return newGoal;
-    });
+      const newCurrent = Math.round((goal.currentAmount + contributionAmount) * 100) / 100;
+      const isCompleted = newCurrent >= goal.targetAmount;
 
-    res.status(201).json(goal);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create savings goal.' });
-  }
-});
+      const result = await prisma.$transaction(async (tx) => {
+        const contribution = await tx.savingsContribution.create({
+          data: {
+            goalId: goal.id,
+            amount: contributionAmount,
+            contributionDate: new Date(),
+            sourceNotes: sourceNotes ? String(sourceNotes).trim() : 'Confirmed received earnings allocation',
+          },
+        });
 
-// Add contribution to savings goal (ONLY confirmed funds)
-router.post('/goals/:id/contributions', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { amount, sourceNotes } = req.body;
-    const goalId = req.params.id;
-    const contributionAmount = Number(amount);
+        const updatedGoal = await tx.savingsGoal.update({
+          where: { id: goal.id },
+          data: {
+            currentAmount: newCurrent,
+            isCompleted,
+          },
+          include: { contributions: true },
+        });
 
-    if (!contributionAmount || contributionAmount <= 0) {
-      res.status(400).json({ error: 'Valid contribution amount is required.' });
-      return;
-    }
-
-    const goal = await prisma.savingsGoal.findFirst({
-      where: { id: goalId, userId: req.userId },
-    });
-
-    if (!goal) {
-      res.status(404).json({ error: 'Savings goal not found.' });
-      return;
-    }
-
-    const newCurrent = goal.currentAmount + contributionAmount;
-    const isCompleted = newCurrent >= goal.targetAmount;
-
-    const result = await prisma.$transaction(async (tx) => {
-      const contribution = await tx.savingsContribution.create({
-        data: {
-          goalId,
-          amount: contributionAmount,
-          contributionDate: new Date(),
-          sourceNotes: sourceNotes || 'Confirmed received earnings allocation',
-        },
+        return { contribution, goal: updatedGoal };
       });
 
-      const updatedGoal = await tx.savingsGoal.update({
-        where: { id: goalId },
-        data: {
-          currentAmount: newCurrent,
-          isCompleted,
-        },
-        include: { contributions: true },
-      });
-
-      return { contribution, goal: updatedGoal };
-    });
-
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to record savings contribution.' });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to record savings contribution.' });
+    }
   }
-});
+);
 
 // 3. AI Investment Readiness Assessment
 router.get('/readiness', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const goalId = req.query.goalId as string | undefined;
-    const targetAmount = req.query.targetAmount ? Number(req.query.targetAmount) : undefined;
-    const weeks = req.query.weeks ? Number(req.query.weeks) : undefined;
+    const targetAmount = req.query.targetAmount ? Math.max(0, Number(req.query.targetAmount)) : undefined;
+    const weeks = req.query.weeks ? Math.min(52, Math.max(1, Number(req.query.weeks))) : undefined;
 
     const analysis = await AIService.analyzeInvestmentReadiness(
       req.userId!,

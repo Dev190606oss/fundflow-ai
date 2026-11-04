@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.middleware';
+import { validateBody, createClientSchema } from '../middleware/validate.middleware';
 
 const router = Router();
 
-// Get all clients
+// Get all clients for authenticated user
 router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const clients = await prisma.client.findMany({
@@ -43,39 +44,39 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response): P
   }
 });
 
-// Create client
-router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { name, email, phone, company, projectDetails, contractAmount, startDate, deadline, projectStatus, paymentStatus } = req.body;
+// Create client (with strict validation)
+router.post(
+  '/',
+  requireAuth,
+  validateBody(createClientSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { name, email, phone, company, projectDetails, contractAmount, startDate, deadline, projectStatus, paymentStatus } = req.body;
 
-    if (!name || !email) {
-      res.status(400).json({ error: 'Client name and email are required.' });
-      return;
+      const client = await prisma.client.create({
+        data: {
+          userId: req.userId!,
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone ? phone.trim() : null,
+          company: company ? company.trim() : null,
+          projectDetails: projectDetails ? projectDetails.trim() : null,
+          contractAmount: Number(contractAmount) || 0,
+          startDate: startDate ? new Date(startDate) : null,
+          deadline: deadline ? new Date(deadline) : null,
+          projectStatus: projectStatus || 'Active',
+          paymentStatus: paymentStatus || 'Pending',
+        },
+      });
+
+      res.status(201).json(client);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create client.' });
     }
-
-    const client = await prisma.client.create({
-      data: {
-        userId: req.userId!,
-        name,
-        email,
-        phone: phone || null,
-        company: company || null,
-        projectDetails: projectDetails || null,
-        contractAmount: Number(contractAmount) || 0,
-        startDate: startDate ? new Date(startDate) : null,
-        deadline: deadline ? new Date(deadline) : null,
-        projectStatus: projectStatus || 'Active',
-        paymentStatus: paymentStatus || 'Pending',
-      },
-    });
-
-    res.status(201).json(client);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create client.' });
   }
-});
+);
 
-// Get client by ID
+// Get client by ID (Enforces strict ownership)
 router.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const client = await prisma.client.findFirst({
@@ -100,7 +101,7 @@ router.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
   }
 });
 
-// Update client
+// Update client (Enforces ownership & prevents IDOR)
 router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { name, email, phone, company, projectDetails, contractAmount, startDate, deadline, projectStatus, paymentStatus } = req.body;
@@ -115,14 +116,14 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
     }
 
     const updated = await prisma.client.update({
-      where: { id: req.params.id },
+      where: { id: existing.id },
       data: {
-        ...(name && { name }),
-        ...(email && { email }),
-        phone: phone !== undefined ? phone : existing.phone,
-        company: company !== undefined ? company : existing.company,
-        projectDetails: projectDetails !== undefined ? projectDetails : existing.projectDetails,
-        contractAmount: contractAmount !== undefined ? Number(contractAmount) : existing.contractAmount,
+        ...(name && { name: String(name).trim() }),
+        ...(email && { email: String(email).trim().toLowerCase() }),
+        phone: phone !== undefined ? (phone ? String(phone).trim() : null) : existing.phone,
+        company: company !== undefined ? (company ? String(company).trim() : null) : existing.company,
+        projectDetails: projectDetails !== undefined ? (projectDetails ? String(projectDetails).trim() : null) : existing.projectDetails,
+        contractAmount: contractAmount !== undefined ? Math.max(0, Number(contractAmount)) : existing.contractAmount,
         startDate: startDate !== undefined ? (startDate ? new Date(startDate) : null) : existing.startDate,
         deadline: deadline !== undefined ? (deadline ? new Date(deadline) : null) : existing.deadline,
         projectStatus: projectStatus || existing.projectStatus,
@@ -136,7 +137,7 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
   }
 });
 
-// Delete client
+// Delete client (Enforces ownership)
 router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const existing = await prisma.client.findFirst({
@@ -149,7 +150,7 @@ router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res: Respon
     }
 
     await prisma.client.delete({
-      where: { id: req.params.id },
+      where: { id: existing.id },
     });
 
     res.json({ message: 'Client deleted successfully.' });
@@ -158,7 +159,7 @@ router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res: Respon
   }
 });
 
-// Create project for a client
+// Create project for a client (Enforces ownership)
 router.post('/:id/projects', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { title, description, budget, deadline, status, deliverables, milestones } = req.body;
@@ -176,10 +177,10 @@ router.post('/:id/projects', requireAuth, async (req: AuthenticatedRequest, res:
     const project = await prisma.project.create({
       data: {
         userId: req.userId!,
-        clientId,
-        title,
-        description,
-        budget: Number(budget) || 0,
+        clientId: client.id,
+        title: String(title).trim(),
+        description: description ? String(description).trim() : null,
+        budget: Math.max(0, Number(budget) || 0),
         deadline: deadline ? new Date(deadline) : null,
         status: status || 'In Progress',
         deliverables: typeof deliverables === 'object' ? JSON.stringify(deliverables) : deliverables,

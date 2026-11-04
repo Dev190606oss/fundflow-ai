@@ -1,49 +1,49 @@
 import { Router, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { AIService } from '../services/ai.service';
+import { validateBody, aiBriefSchema, aiReminderSchema, aiChatSchema } from '../middleware/validate.middleware';
 
 const router = Router();
 
-// 1. Generate Structured Project Brief from Natural Language
-router.post('/project-brief', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { prompt, clientName } = req.body;
-
-    if (!prompt) {
-      res.status(400).json({ error: 'Project description prompt is required.' });
-      return;
+// 1. Generate Structured Project Brief from Natural Language (Strict validation)
+router.post(
+  '/project-brief',
+  requireAuth,
+  validateBody(aiBriefSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { prompt, clientName } = req.body;
+      const brief = await AIService.generateProjectBrief({ prompt, clientName });
+      res.json(brief);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to generate project brief.' });
     }
-
-    const brief = await AIService.generateProjectBrief({ prompt, clientName });
-    res.json(brief);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to generate project brief.' });
   }
-});
+);
 
-// 2. Generate Polite Reminder Message
-router.post('/polite-reminder', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { partyName, amount, dueDate, type, context } = req.body;
+// 2. Generate Polite Reminder Message (Strict validation)
+router.post(
+  '/polite-reminder',
+  requireAuth,
+  validateBody(aiReminderSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { partyName, amount, dueDate, type, context } = req.body;
 
-    if (!partyName || !amount) {
-      res.status(400).json({ error: 'Party name and amount are required.' });
-      return;
+      const reminder = await AIService.generatePoliteReminder({
+        partyName: partyName.trim(),
+        amount: Number(amount),
+        dueDate: dueDate || 'in upcoming days',
+        type: type || 'INVOICE',
+        context: context ? String(context).trim() : undefined,
+      });
+
+      res.json(reminder);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to generate polite reminder.' });
     }
-
-    const reminder = await AIService.generatePoliteReminder({
-      partyName,
-      amount: Number(amount),
-      dueDate: dueDate || 'in upcoming days',
-      type: type || 'INVOICE',
-      context,
-    });
-
-    res.json(reminder);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to generate polite reminder.' });
   }
-});
+);
 
 // 3. Investment Readiness Analysis
 router.post('/readiness-analysis', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -52,8 +52,8 @@ router.post('/readiness-analysis', requireAuth, async (req: AuthenticatedRequest
     const analysis = await AIService.analyzeInvestmentReadiness(
       req.userId!,
       goalId,
-      targetAmount ? Number(targetAmount) : undefined,
-      targetWeeks ? Number(targetWeeks) : undefined
+      targetAmount ? Math.max(0, Number(targetAmount)) : undefined,
+      targetWeeks ? Math.min(52, Math.max(1, Number(targetWeeks))) : undefined
     );
     res.json(analysis);
   } catch (error) {
@@ -61,22 +61,21 @@ router.post('/readiness-analysis', requireAuth, async (req: AuthenticatedRequest
   }
 });
 
-// 4. Conversational Financial Assistant Chat
-router.post('/chat', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { message, history } = req.body;
-
-    if (!message) {
-      res.status(400).json({ error: 'Message content is required.' });
-      return;
+// 4. Conversational Financial Assistant Chat (Strict validation)
+router.post(
+  '/chat',
+  requireAuth,
+  validateBody(aiChatSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { message, history } = req.body;
+      const reply = await AIService.chat(req.userId!, message, history || []);
+      res.json({ reply });
+    } catch (error) {
+      console.error('AI chat error:', error);
+      res.status(500).json({ error: 'AI Assistant failed to generate response.' });
     }
-
-    const reply = await AIService.chat(req.userId!, message, history || []);
-    res.json({ reply });
-  } catch (error) {
-    console.error('AI chat error:', error);
-    res.status(500).json({ error: 'AI Assistant failed to generate response.' });
   }
-});
+);
 
 export default router;

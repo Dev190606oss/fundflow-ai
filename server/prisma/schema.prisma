@@ -7,6 +7,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 enum InvoiceStatus {
   DRAFT
   PENDING
@@ -83,6 +88,7 @@ model User {
   passwordHash            String
   name                    String
   businessName            String?                 @default("Freelance Studio")
+  role                    Role                    @default(USER)
   currency                String                  @default("INR")
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt

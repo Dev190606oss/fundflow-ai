@@ -9,6 +9,7 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     name: string;
     businessName: string | null;
+    role: string;
     currency: string;
   };
 }
@@ -37,6 +38,7 @@ export const requireAuth = async (
         email: true,
         name: true,
         businessName: true,
+        role: true,
         currency: true,
       },
     });
@@ -52,4 +54,19 @@ export const requireAuth = async (
   } catch (error) {
     res.status(401).json({ error: 'Invalid or expired authorization token.' });
   }
+};
+
+/**
+ * RBAC: Restrict endpoint to system administrators
+ */
+export const requireAdmin = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  if (!req.user || req.user.role !== 'ADMIN') {
+    res.status(403).json({ error: 'Forbidden. Administrative privileges required.' });
+    return;
+  }
+  next();
 };
