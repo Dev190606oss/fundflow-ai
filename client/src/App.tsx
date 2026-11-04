@@ -31,11 +31,11 @@ export const App: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center space-y-4">
-        <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-extrabold text-2xl animate-pulse">
+      <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center space-y-3">
+        <div className="w-10 h-10 rounded-lg bg-[#171717] flex items-center justify-center text-white font-mono font-bold text-base">
           F
         </div>
-        <p className="text-sm text-slate-400 font-medium">Initializing FundFlow AI...</p>
+        <p className="text-xs text-[#737373]">Loading FundFlow AI...</p>
       </div>
     );
   }
@@ -47,7 +47,7 @@ export const App: React.FC = () => {
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-[#F8F9FA] text-[#171717]">
       {/* Sidebar */}
       <Sidebar
         activeTab={activeTab}
@@ -67,8 +67,8 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main
-        className={`pt-16 min-h-screen transition-all duration-300 ${
-          sidebarCollapsed ? 'ml-20' : 'ml-64'
+        className={`pt-14 min-h-screen transition-all duration-200 ${
+          sidebarCollapsed ? 'ml-16' : 'ml-60'
         }`}
       >
         {activeTab === 'dashboard' && <DashboardPage onNavigate={setActiveTab} />}

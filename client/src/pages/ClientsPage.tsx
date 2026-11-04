@@ -6,18 +6,15 @@ import {
   Phone,
   Building,
   Calendar,
-  Briefcase,
   Sparkles,
   Search,
   CheckCircle2,
   Trash2,
-  Edit2,
-  ArrowRight,
   Loader2,
-  FolderPlus,
+  X,
 } from 'lucide-react';
 import { clientApi, aiApi } from '../services/api';
-import { Client, Project } from '../types';
+import { Client } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
 
@@ -119,7 +116,7 @@ export const ClientsPage: React.FC = () => {
       setShowAIBriefModal(false);
       setGeneratedBrief(null);
       fetchClients();
-      alert('Project brief attached to client successfully!');
+      alert('Project brief attached to client successfully.');
     } catch (err: any) {
       alert(err.message || 'Failed to attach project');
     }
@@ -147,56 +144,56 @@ export const ClientsPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Freelance & Clients</h1>
-          <p className="text-xs text-slate-500 mt-1">Manage client accounts, contracts, revenue, and AI project briefs.</p>
+          <h1 className="text-xl font-bold text-[#171717] tracking-tight">Clients &amp; Accounts</h1>
+          <p className="text-xs text-[#737373] mt-0.5">Manage client profiles, contracts, outstanding dues, and project specifications.</p>
         </div>
 
         <button
           onClick={() => setShowAddClient(true)}
-          className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition self-start"
+          className="btn-primary flex items-center space-x-1.5 self-start"
         >
-          <Plus size={16} />
-          <span>Add New Client</span>
+          <Plus size={14} />
+          <span>Add Client</span>
         </button>
       </div>
 
       {/* Search Bar */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#737373]" size={14} />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Filter clients by name, email, or company..."
-          className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          placeholder="Filter by name, email, or company..."
+          className="fintech-input pl-9 text-xs"
         />
       </div>
 
       {/* Clients Grid */}
       {loading ? (
-        <div className="py-12 text-center text-slate-400 text-xs">Loading clients...</div>
+        <div className="py-12 text-center text-[#737373] text-xs">Loading clients...</div>
       ) : filtered.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((client) => (
             <div key={client.id} className="fintech-card p-5 flex flex-col justify-between">
               <div>
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-bold text-slate-900 text-base">{client.name}</h3>
+                    <h3 className="font-semibold text-[#171717] text-sm">{client.name}</h3>
                     {client.company && (
-                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                        <Building size={12} className="text-slate-400" />
+                      <p className="text-xs text-[#737373] flex items-center gap-1 mt-0.5">
+                        <Building size={12} className="text-[#737373]" />
                         <span>{client.company}</span>
                       </p>
                     )}
                   </div>
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] font-medium px-2 py-0.5 rounded border ${
                       client.paymentStatus === 'Paid'
-                        ? 'bg-emerald-100 text-emerald-700'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : client.paymentStatus === 'Partially Paid'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-amber-100 text-amber-700'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
                     }`}
                   >
                     {client.paymentStatus}
@@ -204,34 +201,34 @@ export const ClientsPage: React.FC = () => {
                 </div>
 
                 {/* Contact info */}
-                <div className="mt-4 space-y-1.5 text-xs text-slate-600">
+                <div className="mt-4 space-y-1.5 text-xs text-[#737373]">
                   <div className="flex items-center gap-2">
-                    <Mail size={13} className="text-slate-400" />
+                    <Mail size={12} className="text-[#737373]" />
                     <span className="truncate">{client.email}</span>
                   </div>
                   {client.phone && (
                     <div className="flex items-center gap-2">
-                      <Phone size={13} className="text-slate-400" />
+                      <Phone size={12} className="text-[#737373]" />
                       <span>{client.phone}</span>
                     </div>
                   )}
                   {client.deadline && (
                     <div className="flex items-center gap-2">
-                      <Calendar size={13} className="text-slate-400" />
+                      <Calendar size={12} className="text-[#737373]" />
                       <span>Target: {formatDate(client.deadline)}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Contract & Revenue Numbers */}
-                <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+                <div className="mt-4 pt-3 border-t border-[#E5E7EB] grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-slate-400 text-[10px] uppercase font-bold">Contract</span>
-                    <p className="font-bold text-slate-800">{formatCurrency(client.contractAmount, currency)}</p>
+                    <span className="text-[#737373] text-[10px] uppercase font-semibold">Contract</span>
+                    <p className="font-semibold text-[#171717] tabular-nums">{formatCurrency(client.contractAmount, currency)}</p>
                   </div>
                   <div>
-                    <span className="text-slate-400 text-[10px] uppercase font-bold">Outstanding</span>
-                    <p className="font-bold text-amber-600">
+                    <span className="text-[#737373] text-[10px] uppercase font-semibold">Outstanding</span>
+                    <p className="font-semibold text-amber-700 tabular-nums">
                       {formatCurrency(client.outstanding || 0, currency)}
                     </p>
                   </div>
@@ -239,148 +236,148 @@ export const ClientsPage: React.FC = () => {
 
                 {/* Project Details if any */}
                 {client.projectDetails && (
-                  <p className="mt-3 text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg line-clamp-2">
+                  <p className="mt-3 text-[11px] text-[#737373] bg-[#F8F9FA] p-2 rounded border border-[#E5E7EB] line-clamp-2">
                     {client.projectDetails}
                   </p>
                 )}
               </div>
 
               {/* Action Buttons */}
-              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div className="mt-4 pt-3 border-t border-[#E5E7EB] flex items-center justify-between">
                 <button
                   onClick={() => {
                     setSelectedClient(client);
                     setShowAIBriefModal(true);
                   }}
-                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition"
+                  className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded border border-teal-200 text-xs font-medium flex items-center gap-1.5 transition"
                   title="Generate structured project brief with AI"
                 >
-                  <Sparkles size={13} className="text-blue-500" />
+                  <Sparkles size={12} className="text-teal-700" />
                   <span>AI Brief</span>
                 </button>
 
-                <div className="flex items-center space-x-1">
-                  <button
-                    onClick={() => handleDeleteClient(client.id)}
-                    className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition"
-                    title="Delete Client"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
+                <button
+                  onClick={() => handleDeleteClient(client.id)}
+                  className="p-1.5 text-[#737373] hover:text-rose-600 rounded transition"
+                  title="Delete Client"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             </div>
           ))}
         </div>
       ) : (
         <div className="p-12 text-center fintech-card">
-          <Users className="mx-auto text-slate-300 mb-2" size={32} />
-          <p className="text-sm font-semibold text-slate-700">No clients found</p>
-          <p className="text-xs text-slate-400 mt-1">Add your first freelance client to get started.</p>
+          <Users className="mx-auto text-[#737373] mb-2" size={28} />
+          <p className="text-xs font-semibold text-[#171717]">No clients found</p>
+          <p className="text-xs text-[#737373] mt-0.5">Add your first freelance client to get started.</p>
         </div>
       )}
 
       {/* Add Client Modal */}
       {showAddClient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="font-bold text-sm">Add New Freelance Client</h3>
-              <button onClick={() => setShowAddClient(false)} className="text-slate-400 hover:text-white">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="fintech-card w-full max-w-lg overflow-hidden bg-white">
+            <div className="px-5 py-3.5 bg-[#F8F9FA] border-b border-[#E5E7EB] flex justify-between items-center">
+              <h3 className="font-semibold text-xs text-[#171717]">Add New Freelance Client</h3>
+              <button onClick={() => setShowAddClient(false)} className="text-[#737373] hover:text-[#171717]">
+                <X size={15} />
+              </button>
             </div>
-            <form onSubmit={handleCreateClient} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleCreateClient} className="p-5 space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Client Name *</label>
+                  <label className="block text-xs font-medium text-[#171717] mb-1">Client Name *</label>
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Acme Tech"
-                    className="w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="fintech-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Company (Optional)</label>
+                  <label className="block text-xs font-medium text-[#171717] mb-1">Company (Optional)</label>
                   <input
                     type="text"
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
                     placeholder="e.g. Acme Corp"
-                    className="w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="fintech-input"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Email *</label>
+                  <label className="block text-xs font-medium text-[#171717] mb-1">Email *</label>
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="billing@acme.com"
-                    className="w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="fintech-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Phone</label>
+                  <label className="block text-xs font-medium text-[#171717] mb-1">Phone</label>
                   <input
                     type="text"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+91 98765 43210"
-                    className="w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="fintech-input"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Contract Amount (INR)</label>
+                  <label className="block text-xs font-medium text-[#171717] mb-1">Contract Amount (INR)</label>
                   <input
                     type="number"
                     value={contractAmount}
                     onChange={(e) => setContractAmount(e.target.value)}
                     placeholder="50000"
-                    className="w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="fintech-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Deadline</label>
+                  <label className="block text-xs font-medium text-[#171717] mb-1">Deadline</label>
                   <input
                     type="date"
                     value={deadline}
                     onChange={(e) => setDeadline(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="fintech-input"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Project Scope / Details</label>
+                <label className="block text-xs font-medium text-[#171717] mb-1">Project Scope / Details</label>
                 <textarea
                   rows={2}
                   value={projectDetails}
                   onChange={(e) => setProjectDetails(e.target.value)}
                   placeholder="Overview of project deliverables..."
-                  className="w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="fintech-input"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-[#E5E7EB]">
                 <button
                   type="button"
                   onClick={() => setShowAddClient(false)}
-                  className="px-4 py-2 border rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  className="btn-secondary"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20"
+                  className="btn-primary"
                 >
                   Save Client
                 </button>
@@ -392,72 +389,74 @@ export const ClientsPage: React.FC = () => {
 
       {/* AI Project Brief Generator Modal */}
       {showAIBriefModal && selectedClient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="fintech-card w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col bg-white">
+            <div className="px-5 py-3.5 bg-[#F8F9FA] border-b border-[#E5E7EB] flex justify-between items-center">
               <div className="flex items-center space-x-2">
-                <Sparkles size={18} className="text-amber-300" />
-                <h3 className="font-bold text-sm">AI Project Brief Generator</h3>
+                <Sparkles size={15} className="text-teal-700" />
+                <h3 className="font-semibold text-xs text-[#171717]">AI Project Brief Generator</h3>
               </div>
-              <button onClick={() => setShowAIBriefModal(false)} className="text-slate-300 hover:text-white">✕</button>
+              <button onClick={() => setShowAIBriefModal(false)} className="text-[#737373] hover:text-[#171717]">
+                <X size={15} />
+              </button>
             </div>
 
-            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            <div className="p-5 space-y-3.5 overflow-y-auto flex-1">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Describe the project in natural language:
+                <label className="block text-xs font-medium text-[#171717] mb-1">
+                  Describe project scope in natural language:
                 </label>
                 <textarea
                   rows={3}
                   value={briefPrompt}
                   onChange={(e) => setBriefPrompt(e.target.value)}
                   placeholder="e.g. Build a portfolio website for a client for ₹15,000 with delivery in 15 days."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="fintech-input"
                 />
               </div>
 
               <button
                 onClick={handleGenerateAIBrief}
                 disabled={generatingBrief}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-2 shadow-md shadow-blue-500/20 disabled:opacity-50"
+                className="w-full btn-primary flex items-center justify-center space-x-2 disabled:opacity-50"
               >
                 {generatingBrief ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>AI Synthesizing Scope & Milestones...</span>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Synthesizing Scope &amp; Milestones...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles size={14} className="text-amber-300" />
+                    <Sparkles size={13} />
                     <span>Generate Structured Proposal</span>
                   </>
                 )}
               </button>
 
               {generatedBrief && (
-                <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-fadeIn">
+                <div className="mt-3 p-4 bg-[#F8F9FA] border border-[#E5E7EB] rounded-lg space-y-3">
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">Generated Title</span>
-                      <h4 className="font-bold text-slate-900 text-sm">{generatedBrief.title}</h4>
+                      <span className="text-[10px] uppercase font-semibold text-teal-800">Proposal Title</span>
+                      <h4 className="font-semibold text-[#171717] text-xs">{generatedBrief.title}</h4>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] uppercase font-bold text-slate-400">Estimated Budget</span>
-                      <p className="font-bold text-slate-900">{formatCurrency(generatedBrief.budget, currency)}</p>
+                      <span className="text-[10px] uppercase font-semibold text-[#737373]">Estimated Budget</span>
+                      <p className="font-semibold text-[#171717] text-xs tabular-nums">{formatCurrency(generatedBrief.budget, currency)}</p>
                     </div>
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Description</span>
-                    <p className="text-xs text-slate-600 mt-0.5">{generatedBrief.description}</p>
+                    <span className="text-[10px] uppercase font-semibold text-[#737373]">Description</span>
+                    <p className="text-xs text-[#737373] mt-0.5">{generatedBrief.description}</p>
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Deliverables</span>
+                    <span className="text-[10px] uppercase font-semibold text-[#737373]">Deliverables</span>
                     <ul className="mt-1 space-y-1">
                       {generatedBrief.deliverables?.map((d: string, i: number) => (
-                        <li key={i} className="text-xs text-slate-700 flex items-center gap-1.5">
-                          <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />
+                        <li key={i} className="text-xs text-[#171717] flex items-center gap-1.5">
+                          <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
                           <span>{d}</span>
                         </li>
                       ))}
@@ -465,12 +464,12 @@ export const ClientsPage: React.FC = () => {
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Payment Milestones</span>
+                    <span className="text-[10px] uppercase font-semibold text-[#737373]">Payment Milestones</span>
                     <div className="mt-1 space-y-1">
                       {generatedBrief.milestones?.map((m: any, idx: number) => (
-                        <div key={idx} className="flex justify-between text-xs bg-white p-2 rounded-lg border border-slate-200">
-                          <span className="font-medium text-slate-700">{m.title}</span>
-                          <span className="font-bold text-slate-900">{formatCurrency(m.amount, currency)} ({m.percentage}%)</span>
+                        <div key={idx} className="flex justify-between text-xs bg-white p-2 rounded border border-[#E5E7EB]">
+                          <span className="font-medium text-[#171717]">{m.title}</span>
+                          <span className="font-semibold text-[#171717] tabular-nums">{formatCurrency(m.amount, currency)} ({m.percentage}%)</span>
                         </div>
                       ))}
                     </div>
@@ -480,16 +479,16 @@ export const ClientsPage: React.FC = () => {
             </div>
 
             {generatedBrief && (
-              <div className="p-4 bg-slate-100 border-t border-slate-200 flex justify-end space-x-2">
+              <div className="p-4 bg-[#F8F9FA] border-t border-[#E5E7EB] flex justify-end space-x-2">
                 <button
                   onClick={() => setShowAIBriefModal(false)}
-                  className="px-4 py-2 border rounded-xl text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50"
+                  className="btn-secondary"
                 >
                   Discard
                 </button>
                 <button
                   onClick={handleSaveAIBriefToClient}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20"
+                  className="btn-primary"
                 >
                   Attach to {selectedClient.name}
                 </button>

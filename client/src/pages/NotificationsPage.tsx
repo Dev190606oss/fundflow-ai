@@ -3,16 +3,13 @@ import {
   Bell,
   CheckCheck,
   AlertTriangle,
-  Clock,
   HandCoins,
   TrendingUp,
-  FileText,
-  Calendar,
   CheckCircle2,
 } from 'lucide-react';
 import { notificationApi } from '../services/api';
 import { Notification } from '../types';
-import { formatDate, formatRelativeTime } from '../utils/formatters';
+import { formatRelativeTime } from '../utils/formatters';
 
 export const NotificationsPage: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -49,15 +46,15 @@ export const NotificationsPage: React.FC = () => {
   const getIcon = (type: string) => {
     switch (type) {
       case 'INVOICE_OVERDUE':
-        return <AlertTriangle size={16} className="text-red-500" />;
+        return <AlertTriangle size={15} className="text-rose-600" />;
       case 'PAYMENT_RECEIVED':
-        return <CheckCircle2 size={16} className="text-emerald-500" />;
+        return <CheckCircle2 size={15} className="text-emerald-600" />;
       case 'LENT_MONEY_RECOVERY':
-        return <HandCoins size={16} className="text-blue-500" />;
+        return <HandCoins size={15} className="text-teal-700" />;
       case 'SAVINGS_GOAL_ALERT':
-        return <TrendingUp size={16} className="text-indigo-500" />;
+        return <TrendingUp size={15} className="text-[#171717]" />;
       default:
-        return <Bell size={16} className="text-slate-400" />;
+        return <Bell size={15} className="text-[#737373]" />;
     }
   };
 
@@ -65,44 +62,44 @@ export const NotificationsPage: React.FC = () => {
     <div className="p-6 lg:p-8 space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Notification Center</h1>
-          <p className="text-xs text-slate-500 mt-1">Alerts on invoice maturities, loan repayments, and savings milestones.</p>
+          <h1 className="text-xl font-bold text-[#171717] tracking-tight">Notification Center</h1>
+          <p className="text-xs text-[#737373] mt-0.5">Alerts on invoice maturities, loan repayments, and savings milestones.</p>
         </div>
 
         <button
           onClick={handleMarkAllRead}
-          className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-sm transition"
+          className="btn-secondary flex items-center space-x-1.5"
         >
           <CheckCheck size={14} />
-          <span>Mark All as Read</span>
+          <span>Mark All Read</span>
         </button>
       </div>
 
-      <div className="fintech-card overflow-hidden divide-y divide-slate-100">
+      <div className="fintech-card overflow-hidden divide-y divide-[#E5E7EB]">
         {loading ? (
-          <div className="py-12 text-center text-xs text-slate-400">Loading alerts...</div>
+          <div className="py-12 text-center text-xs text-[#737373]">Loading alerts...</div>
         ) : notifications.length > 0 ? (
           notifications.map((n) => (
             <div
               key={n.id}
               onClick={() => !n.isRead && handleMarkAsRead(n.id)}
               className={`p-4 flex items-start justify-between cursor-pointer transition ${
-                !n.isRead ? 'bg-blue-50/50 hover:bg-blue-50/80' : 'hover:bg-slate-50'
+                !n.isRead ? 'bg-[#F8F9FA] hover:bg-white' : 'hover:bg-[#F8F9FA]'
               }`}
             >
               <div className="flex items-start space-x-3">
-                <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-200 shrink-0 mt-0.5">
+                <div className="p-2 bg-white rounded border border-[#E5E7EB] shrink-0 mt-0.5">
                   {getIcon(n.type)}
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <h4 className="font-bold text-slate-900 text-xs">{n.title}</h4>
+                    <h4 className="font-semibold text-[#171717] text-xs">{n.title}</h4>
                     {!n.isRead && (
-                      <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-teal-700"></span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{n.message}</p>
-                  <span className="text-[10px] text-slate-400 mt-1 block">
+                  <p className="text-xs text-[#737373] mt-0.5 leading-relaxed">{n.message}</p>
+                  <span className="text-[10px] text-[#737373] mt-1 block">
                     {formatRelativeTime(n.createdAt)}
                   </span>
                 </div>
@@ -110,7 +107,7 @@ export const NotificationsPage: React.FC = () => {
             </div>
           ))
         ) : (
-          <div className="p-12 text-center text-slate-400 text-xs">No notifications right now.</div>
+          <div className="p-12 text-center text-[#737373] text-xs">No notifications right now.</div>
         )}
       </div>
     </div>

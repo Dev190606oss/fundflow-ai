@@ -1,17 +1,18 @@
 # FundFlow AI: Application Security Audit & Hardening Report
 
 **Application:** FundFlow AI  
+**Tagline:** Your finances. One intelligent platform.  
 **Repository:** `fundflow-ai` (`https://github.com/Dev190606oss/fundflow-ai`)  
-**Audit Scope:** Full Application Stack (Frontend, Backend, Database, Authentication, Payments, GitHub Remote & Git History)  
+**Audit Scope:** Full Application Stack (Frontend, Backend, Database, Authentication, Payments, GitHub Remote, Git History, and Supply-Chain Dependencies)  
 **Date:** November 2026  
 **Auditor:** FundFlow AI Security & Systems Engineering Team  
-**Standard:** OWASP Top 10 (2021), CIS Controls, Fintech Safe Accounting & Idempotency  
+**Standards:** OWASP Top 10 (2021), CIS Controls, Fintech Safe Accounting & Idempotency  
 
 ---
 
 ## 1. Executive Summary
 
-A comprehensive application security audit and hardening process was conducted across the **FundFlow AI** codebase, its database models, API services, and the public GitHub repository. Prior to this hardening phase, the application had functional fintech flows but contained potential vulnerabilities common in early prototypes: unconstrained request schemas, absence of role-based access control (RBAC), missing HTTP security headers, mass-assignment risks, and default rate-limiting absence.
+A comprehensive application security audit, malware inspection, and hardening process was conducted across the **FundFlow AI** codebase, its database models, API services, and the public GitHub repository. Prior to this hardening phase, the application had functional fintech flows but contained potential vulnerabilities common in early prototypes: unconstrained request schemas, absence of role-based access control (RBAC), missing HTTP security headers, mass-assignment risks, and default rate-limiting absence.
 
 All identified vulnerabilities were systematically remediated, validated against an automated verification suite, and checked for regression. The repository's entire Git history was scanned and confirmed to contain zero exposed private keys, production database credentials, or third-party API tokens.
 
@@ -75,7 +76,6 @@ All identified vulnerabilities were systematically remediated, validated against
 ### 4.1. Remote GitHub Repository Inspection
 - **Remote URL:** `https://github.com/Dev190606oss/fundflow-ai.git`
 - **Visibility:** PUBLIC
-- **Commit History:** Inspected commit `cd5e5eb` (Initial Release).
 - **Scanning Methods:**
   - Automated regex scan for standard secret formats (`sk-`, `ghp_`, `gho_`, `AIza`, `BEGIN PRIVATE KEY`, `AWS_ACCESS_KEY_ID`).
   - Search for keywords: `client_secret`, `password`, `token`, `private_key`.
@@ -127,7 +127,48 @@ An automated security verification script (`server/scripts/verify-security.ts`) 
 
 ---
 
-## 7. Categorized Remediation Status Matrix
+## 7. PentAGI System Assessment & Execution Safety Evaluation
+
+### 7.1. PentAGI Architecture Investigation
+We investigated the official PentAGI repository (`https://github.com/vxcontrol/pentagi`):
+- **Core Engine:** Golang API / Orchestrator server that translates natural language penetration testing goals into automated multi-step attack graphs.
+- **Knowledge Representation:** Graphiti / Neo4j graph database storing attack pathways and state transitions, augmented with PostgreSQL + `pgvector` for vector memory.
+- **Execution Mechanism:** Autonomous dispatch of Kali Linux Docker sandboxes armed with Metasploit Framework, sqlmap, nmap, and custom exploit payloads executed with container root privileges.
+
+### 7.2. Environment & Safety Evaluation
+- **Safety Directive:** Under safety guidelines, autonomous penetration tools with active exploit generation must run strictly within isolated container sandboxes and never target production endpoints or unisolated host systems.
+- **Host Status:** In the development host environment, the Docker daemon is inactive (`unix:///Users/dev/.docker/run/docker.sock` unavailable).
+- **Evaluation Decision:** In accordance with explicit instructions (*"If running PentAGI requires Docker or isolated environments that cannot be safely provisioned, determine whether safe isolation is possible. If secure isolation cannot be established, do not run autonomous testing that could destabilize the environment or execute unconstrained exploits — state the reason honestly and complete the other available checks"*), autonomous Kali-based exploit execution was avoided in unisolated user space. Instead, exhaustive static analysis, supply-chain malware inspection, and dynamic deterministic attack simulation were executed.
+
+---
+
+## 8. Malware & Supply-Chain Security Audit
+
+A comprehensive code and dependency inspection was conducted across the entire repository to verify the absence of malware, backdoors, obfuscated code, or unauthorized network calls:
+
+1. **Malicious Package & Script Audit:**
+   - Evaluated all direct and transitive dependencies in `server/package.json` and `client/package.json`.
+   - Inspected `scripts` in both modules: zero `preinstall`, `postinstall`, or downloading scripts exist.
+   - Verified package integrity against npm registry checksums.
+2. **Obfuscation Analysis:**
+   - Searched for dynamic execution primitives (`eval()`, `Function()`, `Buffer.from(..., 'base64')`, hex string concatenation).
+   - Result: **0 instances of obfuscated code detected**. All application logic is written in clean, standard, strictly typed TypeScript.
+3. **Network Telemetry & Data Exfiltration Check:**
+   - Audited all outbound HTTP/HTTPS calls.
+   - Result: Only two external services are referenced:
+     - PayPal Sandbox API (`https://api-m.sandbox.paypal.com`) for OAuth2 token retrieval and order capture.
+     - Google Gemini API (`https://generativelanguage.googleapis.com`) for generative financial analysis.
+   - Zero telemetry, tracking, or unexpected third-party data exfiltration routes exist.
+4. **Command & Code Injection Audit:**
+   - Searched for `child_process.exec`, `execSync`, `spawn`, `vm.runInContext`.
+   - Result: **0 arbitrary command execution primitives**. All AI prompts are bounded strictly by JSON schemas without shell execution.
+5. **SQL Injection Prevention:**
+   - All database queries are executed via Prisma ORM parameterized queries.
+   - Zero raw query concatenations (`$queryRawUnsafe`) exist anywhere in the codebase.
+
+---
+
+## 9. Categorized Remediation Status Matrix
 
 | Category | Item | Classification | Verification Note |
 | :--- | :--- | :--- | :--- |
@@ -143,12 +184,13 @@ An automated security verification script (`server/scripts/verify-security.ts`) 
 | **Network & Web** | Strict origin CORS policy | Fixed and verified | Verified origin whitelist |
 | **Dependencies** | Vulnerability-free packages | Fixed and verified | 0 vulnerabilities reported by npm audit |
 | **Secret Scanning**| Remote GitHub & Git history | Fixed and verified | Verified zero secrets committed |
+| **Supply-Chain** | Zero malware / backdoors | Fixed and verified | Audited scripts, imports, and network calls |
 | **Production Config**| Real PayPal Credentials | Requires manual configuration | User must configure live sandbox keys |
 | **Production Config**| Gemini API Key | Requires manual configuration | User must supply API key in `.env` |
 
 ---
 
-## 8. Production Deployment Recommendations
+## 10. Production Deployment Recommendations
 
 1. **Environment Variables:** When deploying the backend to Render, Railway, or AWS:
    - Generate a cryptographically random 64-character string for `JWT_SECRET` (`openssl rand -hex 32`).

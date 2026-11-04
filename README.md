@@ -174,11 +174,14 @@ You can evaluate the complete application using the 1-click demo button on the l
 
 ## 🔒 Security & Financial Safety
 
-1. **Server Payment Verification:** Invoices are never marked as `PAID` based on browser callback parameters. All settlements require direct PayPal backend capture verification.
-2. **Zero Sensitive Data In Repositories:** All API keys, secrets, and connection strings are managed strictly through environment variables.
-3. **Database Isolation:** All queries filter by `userId` to ensure data isolation.
-4. **Password Protection:** Cryptographic password hashing using `bcryptjs` with 10 salt rounds.
-5. **No Speculation Advice:** Investment assistant provides calculations and educational preparation only, including explicit informational disclaimers and emergency fund protections.
+1. **Server Payment Verification & Idempotency:** Invoices are never marked as `PAID` based on browser callback parameters. All settlements require direct PayPal backend capture verification with order idempotency checks to prevent duplicate credits.
+2. **Role-Based Access Control (RBAC):** Distinct `USER` and `ADMIN` roles enforced with dedicated administrative routes and strict schema protection against role self-escalation.
+3. **Multi-Tenant IDOR Isolation:** All relational queries filter by server-verified `userId` extracted exclusively from validated JWT sessions.
+4. **Brute-Force & DoS Protection:** Rate-limiting via `express-rate-limit` (10 attempts / 15 min on auth routes) and strict 1MB JSON body limits.
+5. **Security Headers & Defense-in-Depth:** Configured `helmet` (CSP, nosniff, SAMEORIGIN) and strict origin CORS whitelists.
+6. **Automated Security Verification:** Automated test suite (`npm run test:security`) verifying 11/11 OWASP controls and rate-limiting.
+7. **Zero Secrets in Git:** All credentials, keys, and tokens are managed via environment variables. See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for the full audit report.
+8. **No Speculative Advice:** Investment assistant provides calculations and educational preparation only, including explicit informational disclaimers and emergency fund protections.
 
 ---
 

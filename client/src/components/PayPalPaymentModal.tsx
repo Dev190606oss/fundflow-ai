@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { X, CheckCircle2, ShieldCheck, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { Invoice } from '../types';
 import { paypalApi } from '../services/api';
 import { formatCurrency } from '../utils/formatters';
@@ -40,9 +39,9 @@ export const PayPalPaymentModal: React.FC<PayPalPaymentModalProps> = ({
       const order = await paypalApi.createOrder(invoice.id);
       setOrderId(order.orderId);
 
-      // 2. Simulate user authentication in PayPal Sandbox popup / approval flow
+      // 2. Simulate user authorization in PayPal Sandbox approval flow
       setStep('CAPTURING');
-      await new Promise((resolve) => setTimeout(resolve, 1400));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // 3. Capture order on backend and verify status
       const captureResult = await paypalApi.captureOrder(order.orderId, invoice.id);
@@ -53,13 +52,6 @@ export const PayPalPaymentModal: React.FC<PayPalPaymentModalProps> = ({
           status: captureResult.status,
         });
         setStep('SUCCESS');
-
-        // Confetti burst
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
 
         if (captureResult.invoice) {
           onPaymentSuccess(captureResult.invoice);
@@ -77,161 +69,143 @@ export const PayPalPaymentModal: React.FC<PayPalPaymentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden transition-all">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[2px]">
+      <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-md overflow-hidden shadow-xl">
         {/* Modal Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-navy-900 to-blue-950 text-white flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-400">
-              <span className="font-extrabold italic text-sm text-paypal-lightBlue">P</span>
-            </div>
-            <div>
-              <h3 className="font-bold text-sm tracking-tight flex items-center gap-2">
-                PayPal Checkout
-                <span className="text-[10px] bg-blue-500/20 border border-blue-400/30 text-blue-300 px-2 py-0.5 rounded-full font-mono">
-                  Sandbox v2
-                </span>
-              </h3>
-              <p className="text-xs text-slate-300">Secure Instant Invoice Settlement</p>
-            </div>
+        <div className="px-5 py-3.5 bg-[#171717] text-white flex items-center justify-between border-b border-neutral-800">
+          <div className="flex items-center space-x-2">
+            <span className="font-extrabold italic text-sm text-[#0079C1]">P</span>
+            <span className="font-semibold text-xs tracking-tight">PayPal Checkout Sandbox</span>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800/80 transition"
+            className="text-neutral-400 hover:text-white p-0.5 rounded transition"
           >
-            <X size={18} />
+            <X size={15} />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6">
+        <div className="p-5">
           {step === 'DETAILS' && (
-            <div className="space-y-5">
+            <div className="space-y-4">
               {/* Invoice Summary Box */}
-              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-3">
-                <div className="flex justify-between items-center text-xs text-slate-500">
-                  <span>Invoice Number:</span>
-                  <span className="font-mono font-semibold text-slate-800">{invoice.invoiceNumber}</span>
+              <div className="bg-[#F8F9FA] border border-[#E5E7EB] rounded-md p-3.5 space-y-2 text-xs">
+                <div className="flex justify-between items-center text-neutral-500">
+                  <span>Invoice:</span>
+                  <span className="font-mono font-medium text-neutral-900">{invoice.invoiceNumber}</span>
                 </div>
-                <div className="flex justify-between items-center text-xs text-slate-500">
-                  <span>Client / Buyer:</span>
-                  <span className="font-semibold text-slate-800">{invoice.client.name}</span>
+                <div className="flex justify-between items-center text-neutral-500">
+                  <span>Client:</span>
+                  <span className="font-medium text-neutral-900">{invoice.client.name}</span>
                 </div>
-                <div className="border-t border-slate-200 pt-3 flex justify-between items-baseline">
-                  <span className="text-sm font-semibold text-slate-700">Total Settlement Due:</span>
-                  <span className="text-2xl font-black text-slate-900">
+                <div className="border-t border-[#E5E7EB] pt-2 flex justify-between items-baseline">
+                  <span className="text-xs font-semibold text-neutral-700">Amount Due:</span>
+                  <span className="text-xl font-bold text-neutral-900 tabular-nums">
                     {formatCurrency(balanceDue, currency)}
                   </span>
                 </div>
               </div>
 
               {/* Security Banner */}
-              <div className="flex items-start space-x-3 p-3 bg-emerald-50 border border-emerald-200/60 rounded-xl text-emerald-800 text-xs">
-                <ShieldCheck size={18} className="text-emerald-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">End-to-End Server Verification</p>
-                  <p className="text-emerald-700 mt-0.5">
-                    Payments are authorized via PayPal Orders API and captured on the backend with full audit trail storage.
-                  </p>
-                </div>
+              <div className="flex items-start space-x-2 p-2.5 bg-[#F0FDFA] border border-[#CCFBF1] rounded-md text-[11px] text-teal-800">
+                <ShieldCheck size={15} className="text-teal-600 shrink-0 mt-0.5" />
+                <p>Server-side capture verification via PayPal Orders v2 API.</p>
               </div>
 
               {/* PayPal Sandbox Direct Pay Action */}
-              <div className="space-y-2 pt-2">
+              <div className="space-y-2 pt-1">
                 <button
                   onClick={handleStartCheckout}
                   disabled={loading}
-                  className="w-full py-3.5 px-4 bg-[#FFC439] hover:bg-[#F2BA36] active:bg-[#E5B033] text-slate-900 rounded-xl font-bold flex items-center justify-center space-x-2.5 shadow-md shadow-amber-400/20 transition group"
+                  className="w-full py-2.5 px-4 bg-[#FFC439] hover:bg-[#F4B933] text-neutral-900 rounded-md font-bold text-xs flex items-center justify-center space-x-1.5 transition disabled:opacity-50"
                 >
-                  <span className="font-extrabold italic text-blue-900 text-base">Pay</span>
-                  <span className="font-extrabold italic text-sky-600 text-base">Pal</span>
-                  <span className="text-xs uppercase font-semibold text-slate-700 ml-1">Sandbox Pay Now</span>
-                  <ArrowRight size={16} className="text-slate-700 group-hover:translate-x-0.5 transition" />
+                  <span className="font-extrabold italic text-blue-900">Pay</span>
+                  <span className="font-extrabold italic text-sky-700">Pal</span>
+                  <span className="text-[11px] font-semibold text-neutral-800 ml-1">Sandbox Pay Now</span>
+                  <ArrowRight size={14} className="text-neutral-700 ml-1" />
                 </button>
-                <p className="text-center text-[11px] text-slate-400">
-                  Simulates full buyer approval & backend capture flow
+                <p className="text-center text-[10px] text-neutral-400">
+                  Simulates full buyer approval and backend capture verification
                 </p>
               </div>
             </div>
           )}
 
           {(step === 'AUTHORIZING' || step === 'CAPTURING') && (
-            <div className="py-10 text-center space-y-4">
-              <div className="w-14 h-14 mx-auto rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 animate-spin">
-                <Loader2 size={26} />
-              </div>
+            <div className="py-8 text-center space-y-3">
+              <div className="w-8 h-8 mx-auto border-2 border-neutral-900 border-t-transparent rounded-full animate-spin"></div>
               <div>
-                <h4 className="text-base font-bold text-slate-800">
-                  {step === 'AUTHORIZING' ? 'Connecting to PayPal Sandbox...' : 'Verifying & Capturing Funds...'}
+                <h4 className="text-xs font-semibold text-neutral-900">
+                  {step === 'AUTHORIZING' ? 'Connecting to PayPal Sandbox...' : 'Verifying & Capturing Payment...'}
                 </h4>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-[11px] text-neutral-500 mt-0.5">
                   {step === 'AUTHORIZING'
-                    ? 'Creating secure PayPal Order with intent CAPTURE'
-                    : `Backend verifying PayPal Order ${orderId || ''}`}
+                    ? 'Creating secure PayPal Order v2'
+                    : `Verifying Order ${orderId || ''}`}
                 </p>
               </div>
             </div>
           )}
 
           {step === 'SUCCESS' && (
-            <div className="py-6 text-center space-y-5">
-              <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-600 animate-bounce">
-                <CheckCircle2 size={36} />
+            <div className="py-4 text-center space-y-4">
+              <div className="w-10 h-10 mx-auto rounded-full bg-green-50 border border-green-200 flex items-center justify-center text-green-600">
+                <CheckCircle2 size={22} />
               </div>
 
               <div>
-                <h4 className="text-xl font-bold text-slate-900">Payment Captured & Verified!</h4>
-                <p className="text-xs text-slate-500 mt-1">
-                  Invoice <span className="font-mono font-bold text-slate-700">{invoice.invoiceNumber}</span> is now marked as <strong>PAID</strong>.
+                <h4 className="text-sm font-bold text-neutral-900">Payment Captured & Verified</h4>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Invoice <span className="font-mono font-medium text-neutral-700">{invoice.invoiceNumber}</span> is now marked as <strong>PAID</strong>.
                 </p>
               </div>
 
-              {/* Receipt Details Box */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-left text-xs space-y-2">
+              <div className="bg-[#F8F9FA] border border-[#E5E7EB] rounded-md p-3 text-left text-xs space-y-1.5">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">PayPal Capture ID:</span>
-                  <span className="font-mono font-semibold text-slate-800">{captureDetails.captureId}</span>
+                  <span className="text-neutral-500">Capture ID:</span>
+                  <span className="font-mono text-neutral-800">{captureDetails.captureId}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
-                  <span className="font-bold text-emerald-600">{captureDetails.status || 'COMPLETED'}</span>
+                  <span className="text-neutral-500">Status:</span>
+                  <span className="font-semibold text-green-700">{captureDetails.status || 'COMPLETED'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Amount Cleared:</span>
-                  <span className="font-bold text-slate-900">{formatCurrency(balanceDue, currency)}</span>
+                  <span className="text-neutral-500">Settled Amount:</span>
+                  <span className="font-bold text-neutral-900 tabular-nums">{formatCurrency(balanceDue, currency)}</span>
                 </div>
               </div>
 
               <button
                 onClick={onClose}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition"
+                className="w-full py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-md text-xs font-semibold transition"
               >
-                Close & Return to Invoices
+                Close & Return
               </button>
             </div>
           )}
 
           {step === 'ERROR' && (
-            <div className="py-6 text-center space-y-4">
-              <div className="w-14 h-14 mx-auto rounded-full bg-red-100 border border-red-200 flex items-center justify-center text-red-600">
-                <AlertCircle size={30} />
+            <div className="py-4 text-center space-y-3">
+              <div className="w-10 h-10 mx-auto rounded-full bg-red-50 border border-red-200 flex items-center justify-center text-red-600">
+                <AlertCircle size={22} />
               </div>
 
               <div>
-                <h4 className="text-lg font-bold text-slate-900">Payment Verification Failed</h4>
+                <h4 className="text-xs font-bold text-neutral-900">Payment Verification Failed</h4>
                 <p className="text-xs text-red-600 mt-1">{errorMessage}</p>
               </div>
 
-              <div className="flex space-x-3 pt-2">
+              <div className="flex space-x-2 pt-2">
                 <button
                   onClick={() => setStep('DETAILS')}
-                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition"
+                  className="flex-1 py-1.5 bg-neutral-900 text-white rounded-md text-xs font-semibold hover:bg-neutral-800 transition"
                 >
-                  Try Again
+                  Retry
                 </button>
                 <button
                   onClick={onClose}
-                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-200 transition"
+                  className="flex-1 py-1.5 bg-white border border-[#E5E7EB] text-neutral-700 rounded-md text-xs font-semibold hover:bg-[#F8F9FA] transition"
                 >
                   Cancel
                 </button>

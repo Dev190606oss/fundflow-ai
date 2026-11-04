@@ -1,20 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp,
-  Target,
   Sparkles,
-  ShieldAlert,
   Plus,
   ExternalLink,
-  Calendar,
   CheckCircle2,
   AlertTriangle,
   Info,
-  DollarSign,
-  ArrowRight,
   Loader2,
-  PiggyBank,
-  Percent,
+  X,
 } from 'lucide-react';
 import { investmentApi } from '../services/api';
 import { InvestmentOpportunity, SavingsGoal } from '../types';
@@ -139,14 +132,14 @@ export const InvestmentsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Investment Opportunities & Readiness
+          <h1 className="text-xl font-bold text-[#171717] tracking-tight">
+            Investment Opportunities &amp; Readiness
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-[#737373] mt-0.5">
             Track upcoming IPOs, design dedicated savings plans, and analyze capital readiness with AI.
           </p>
         </div>
@@ -154,9 +147,9 @@ export const InvestmentsPage: React.FC = () => {
         <div className="flex gap-2">
           <button
             onClick={() => setShowAddOppModal(true)}
-            className="flex items-center space-x-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition"
+            className="btn-primary flex items-center space-x-1.5"
           >
-            <Plus size={15} />
+            <Plus size={14} />
             <span>Track Opportunity</span>
           </button>
           <button
@@ -165,31 +158,33 @@ export const InvestmentsPage: React.FC = () => {
               setGoalTargetDate(fourWeeks);
               setShowAddGoalModal(true);
             }}
-            className="flex items-center space-x-1.5 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold shadow-md transition"
+            className="btn-secondary flex items-center space-x-1.5"
           >
-            <Plus size={15} />
+            <Plus size={14} />
             <span>New Savings Goal</span>
           </button>
         </div>
       </div>
 
-      {/* AI Investment Readiness Command Box (CENTRAL DIFFERENTIATING FEATURE) */}
+      {/* AI Investment Readiness Command Box */}
       {readiness && (
-        <div className="bg-gradient-to-br from-slate-900 via-navy-900 to-blue-950 rounded-2xl p-6 text-white border border-slate-700/80 shadow-2xl space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
+        <div className="fintech-card p-6 space-y-5 bg-white">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#E5E7EB] pb-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2.5 bg-blue-500/20 border border-blue-400/30 rounded-xl text-blue-300">
-                <Sparkles size={22} className="text-amber-300" />
+              <div className="p-2 bg-teal-50 border border-teal-200 rounded text-teal-800">
+                <Sparkles size={18} />
               </div>
               <div>
-                <h3 className="font-extrabold text-lg text-white tracking-tight flex items-center gap-2">
-                  AI Investment Readiness Assistant
-                  <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/40">
-                    Live Synthesis
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm text-[#171717] tracking-tight">
+                    AI Investment Readiness Assessment
+                  </h3>
+                  <span className="text-[10px] font-medium bg-teal-50 text-teal-800 px-2 py-0.5 rounded border border-teal-200">
+                    Live Heuristic Engine
                   </span>
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Target: {formatCurrency(readiness.targetAmount, currency)} over {readiness.weeksRemaining} weeks
+                </div>
+                <p className="text-xs text-[#737373] mt-0.5">
+                  Target requirement: {formatCurrency(readiness.targetAmount, currency)} over {readiness.weeksRemaining} weeks
                 </p>
               </div>
             </div>
@@ -197,7 +192,7 @@ export const InvestmentsPage: React.FC = () => {
             <button
               onClick={() => handleRefreshReadiness()}
               disabled={analyzingReadiness}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 disabled:opacity-50 self-start"
+              className="btn-secondary flex items-center gap-1.5 text-xs self-start disabled:opacity-50"
             >
               {analyzingReadiness ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
               <span>Recalculate Strategy</span>
@@ -205,100 +200,100 @@ export const InvestmentsPage: React.FC = () => {
           </div>
 
           {/* Readiness Numbers Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-            <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/60">
-              <span className="text-slate-400 uppercase font-bold text-[10px]">Target Requirement</span>
-              <p className="text-xl font-black text-white mt-1">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div className="bg-[#F8F9FA] p-4 rounded border border-[#E5E7EB]">
+              <span className="text-[#737373] uppercase font-semibold text-[10px]">Target Requirement</span>
+              <p className="text-lg font-bold text-[#171717] mt-1 tabular-nums">
                 {formatCurrency(readiness.targetAmount, currency)}
               </p>
-              <p className="text-[10px] text-slate-400 mt-0.5">Full allocation budget</p>
+              <p className="text-[10px] text-[#737373] mt-0.5">Full capital target</p>
             </div>
 
-            <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/60">
-              <span className="text-slate-400 uppercase font-bold text-[10px]">Confirmed Savings</span>
-              <p className="text-xl font-black text-emerald-400 mt-1">
+            <div className="bg-[#F8F9FA] p-4 rounded border border-[#E5E7EB]">
+              <span className="text-[#737373] uppercase font-semibold text-[10px]">Confirmed Savings</span>
+              <p className="text-lg font-bold text-emerald-700 mt-1 tabular-nums">
                 {formatCurrency(readiness.currentSavings, currency)}
               </p>
-              <p className="text-[10px] text-emerald-400/80 mt-0.5">100% available cash</p>
+              <p className="text-[10px] text-[#737373] mt-0.5">Available liquid cash</p>
             </div>
 
-            <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/60">
-              <span className="text-slate-400 uppercase font-bold text-[10px]">Current Savings Gap</span>
-              <p className="text-xl font-black text-amber-400 mt-1">
+            <div className="bg-[#F8F9FA] p-4 rounded border border-[#E5E7EB]">
+              <span className="text-[#737373] uppercase font-semibold text-[10px]">Current Savings Gap</span>
+              <p className="text-lg font-bold text-amber-700 mt-1 tabular-nums">
                 {formatCurrency(readiness.savingsGap, currency)}
               </p>
-              <p className="text-[10px] text-amber-400/80 mt-0.5">To accumulate</p>
+              <p className="text-[10px] text-[#737373] mt-0.5">Capital to accumulate</p>
             </div>
 
-            <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/60">
-              <span className="text-slate-400 uppercase font-bold text-[10px]">Required / Week</span>
-              <p className="text-xl font-black text-blue-400 mt-1">
+            <div className="bg-[#F8F9FA] p-4 rounded border border-[#E5E7EB]">
+              <span className="text-[#737373] uppercase font-semibold text-[10px]">Required / Week</span>
+              <p className="text-lg font-bold text-teal-800 mt-1 tabular-nums">
                 {formatCurrency(readiness.weeklySavingsRequired, currency)}
               </p>
-              <p className="text-[10px] text-blue-300 mt-0.5">Paced over {readiness.weeksRemaining} weeks</p>
+              <p className="text-[10px] text-[#737373] mt-0.5">Paced over {readiness.weeksRemaining} weeks</p>
             </div>
           </div>
 
           {/* Capital Sources Breakdown: Confirmed vs Pending Receivables vs Expected Repayments */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            {/* Column 1: Pending Invoices that can fund it */}
-            <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/40 space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-bold">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            {/* Column 1: Pending Invoices */}
+            <div className="bg-[#F8F9FA] p-3.5 rounded border border-[#E5E7EB] space-y-2">
+              <div className="flex items-center justify-between text-[#171717] font-semibold text-xs">
                 <span>Pending Client Invoices</span>
-                <span className="text-amber-400">Potential Inflow</span>
+                <span className="text-amber-700 text-[10px] font-medium">Potential Inflow</span>
               </div>
-              <div className="space-y-1.5 mt-2">
+              <div className="space-y-1 mt-2">
                 {readiness.pendingReceivables?.map((item: any, i: number) => (
-                  <div key={i} className="flex justify-between p-2 bg-slate-900/60 rounded-lg">
-                    <span className="text-slate-300 truncate max-w-[140px]">{item.source}</span>
-                    <span className="font-bold text-white">{formatCurrency(item.amount, currency)}</span>
+                  <div key={i} className="flex justify-between p-2 bg-white rounded border border-[#E5E7EB]">
+                    <span className="text-[#737373] truncate max-w-[140px]">{item.source}</span>
+                    <span className="font-semibold text-[#171717] tabular-nums">{formatCurrency(item.amount, currency)}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Column 2: Peer Loan Repayments Expected */}
-            <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/40 space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-bold">
+            <div className="bg-[#F8F9FA] p-3.5 rounded border border-[#E5E7EB] space-y-2">
+              <div className="flex items-center justify-between text-[#171717] font-semibold text-xs">
                 <span>Expected Loan Repayments</span>
-                <span className="text-blue-400">Receivable</span>
+                <span className="text-teal-800 text-[10px] font-medium">Receivable</span>
               </div>
-              <div className="space-y-1.5 mt-2">
+              <div className="space-y-1 mt-2">
                 {readiness.expectedRepayments?.map((item: any, i: number) => (
-                  <div key={i} className="flex justify-between p-2 bg-slate-900/60 rounded-lg">
-                    <span className="text-slate-300">{item.person}</span>
-                    <span className="font-bold text-white">{formatCurrency(item.amount, currency)}</span>
+                  <div key={i} className="flex justify-between p-2 bg-white rounded border border-[#E5E7EB]">
+                    <span className="text-[#737373]">{item.person}</span>
+                    <span className="font-semibold text-[#171717] tabular-nums">{formatCurrency(item.amount, currency)}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Column 3: Protected Reserves (Do Not Touch) */}
-            <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/40 space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-bold">
+            {/* Column 3: Protected Reserves */}
+            <div className="bg-[#F8F9FA] p-3.5 rounded border border-[#E5E7EB] space-y-2">
+              <div className="flex items-center justify-between text-[#171717] font-semibold text-xs">
                 <span>Protected Obligations</span>
-                <span className="text-red-400">Do Not Touch</span>
+                <span className="text-rose-700 text-[10px] font-medium">Do Not Touch</span>
               </div>
-              <div className="space-y-1.5 mt-2">
+              <div className="space-y-1 mt-2">
                 {readiness.liabilitiesToProtect?.map((item: any, i: number) => (
-                  <div key={i} className="flex justify-between p-2 bg-slate-900/60 rounded-lg">
-                    <span className="text-slate-300 truncate max-w-[140px]">{item.obligation}</span>
-                    <span className="font-bold text-red-300">{formatCurrency(item.amount, currency)}</span>
+                  <div key={i} className="flex justify-between p-2 bg-white rounded border border-[#E5E7EB]">
+                    <span className="text-[#737373] truncate max-w-[140px]">{item.obligation}</span>
+                    <span className="font-semibold text-rose-700 tabular-nums">{formatCurrency(item.amount, currency)}</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* AI Strategy & Risk Warnings */}
-          <div className="p-4 bg-blue-950/40 rounded-xl border border-blue-900/60 space-y-3">
-            <span className="text-xs font-bold text-blue-300 uppercase tracking-wider">
-              AI Action Strategy
+          {/* AI Strategy */}
+          <div className="p-3.5 bg-[#F8F9FA] rounded border border-[#E5E7EB] space-y-2">
+            <span className="text-[10px] font-semibold text-[#171717] uppercase tracking-wider">
+              Strategic Action Plan
             </span>
-            <ul className="space-y-1.5 text-xs text-slate-200">
+            <ul className="space-y-1.5 text-xs text-[#171717]">
               {readiness.recommendedStrategy?.map((strat: string, i: number) => (
                 <li key={i} className="flex items-start gap-2">
-                  <CheckCircle2 size={14} className="text-emerald-400 shrink-0 mt-0.5" />
+                  <CheckCircle2 size={13} className="text-teal-700 shrink-0 mt-0.5" />
                   <span>{strat}</span>
                 </li>
               ))}
@@ -306,72 +301,70 @@ export const InvestmentsPage: React.FC = () => {
           </div>
 
           {/* Financial Disclaimer */}
-          <div className="flex items-start space-x-2 text-[11px] text-slate-400 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-            <Info size={15} className="text-slate-500 shrink-0 mt-0.5" />
+          <div className="flex items-start space-x-2 text-[11px] text-[#737373] bg-[#F8F9FA] p-3 rounded border border-[#E5E7EB]">
+            <Info size={14} className="text-[#737373] shrink-0 mt-0.5" />
             <p>{readiness.disclaimer}</p>
           </div>
         </div>
       )}
 
       {/* Savings Goals Tracker */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Savings Planner & Dedicated Allocations</h2>
-            <p className="text-xs text-slate-500">Only confirmed received earnings are allocated here.</p>
-          </div>
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-base font-bold text-[#171717]">Savings Plans &amp; Dedicated Allocations</h2>
+          <p className="text-xs text-[#737373]">Allocations funded from realized client earnings and debt recovery.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {goals.map((goal) => (
-            <div key={goal.id} className="fintech-card p-5 space-y-4">
+            <div key={goal.id} className="fintech-card p-5 space-y-3.5">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] font-medium uppercase text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded">
                     {goal.category || 'Goal'}
                   </span>
-                  <h3 className="text-base font-bold text-slate-900 mt-1">{goal.title}</h3>
-                  <p className="text-xs text-slate-500">Target Date: {formatDate(goal.targetDate)}</p>
+                  <h3 className="text-sm font-semibold text-[#171717] mt-1">{goal.title}</h3>
+                  <p className="text-xs text-[#737373]">Target Date: {formatDate(goal.targetDate)}</p>
                 </div>
                 <button
                   onClick={() => setSelectedGoalForDeposit(goal)}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition"
+                  className="btn-secondary text-xs flex items-center gap-1"
                 >
-                  <Plus size={14} /> Add Savings
+                  <Plus size={13} /> Add Savings
                 </button>
               </div>
 
               {/* Progress */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-bold">
-                  <span className="text-slate-700">{formatCurrency(goal.currentAmount, currency)} saved</span>
-                  <span className="text-slate-500">{formatCurrency(goal.targetAmount, currency)} target</span>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-medium">
+                  <span className="text-[#171717] tabular-nums">{formatCurrency(goal.currentAmount, currency)} saved</span>
+                  <span className="text-[#737373] tabular-nums">{formatCurrency(goal.targetAmount, currency)} target</span>
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                <div className="w-full bg-[#E5E7EB] rounded-full h-1.5 overflow-hidden">
                   <div
-                    className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                    className="bg-teal-600 h-full rounded-full transition-all"
                     style={{ width: `${Math.min(100, goal.percentage || 0)}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-[11px] text-slate-500">
+                <div className="flex justify-between text-[11px] text-[#737373]">
                   <span>{goal.percentage}% completed</span>
-                  <span>Remaining: {formatCurrency(goal.remainingAmount || 0, currency)}</span>
+                  <span className="tabular-nums">Remaining: {formatCurrency(goal.remainingAmount || 0, currency)}</span>
                 </div>
               </div>
 
               {/* Weekly/Daily pace */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="p-2.5 bg-[#F8F9FA] rounded border border-[#E5E7EB] grid grid-cols-3 gap-2 text-center text-xs">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Daily Pace</span>
-                  <p className="font-bold text-slate-800">{formatCurrency(goal.dailyRequired || 0, currency)}</p>
+                  <span className="text-[10px] text-[#737373] uppercase font-semibold">Daily Pace</span>
+                  <p className="font-semibold text-[#171717] tabular-nums">{formatCurrency(goal.dailyRequired || 0, currency)}</p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Weekly Pace</span>
-                  <p className="font-bold text-blue-600">{formatCurrency(goal.weeklyRequired || 0, currency)}</p>
+                  <span className="text-[10px] text-[#737373] uppercase font-semibold">Weekly Pace</span>
+                  <p className="font-semibold text-teal-800 tabular-nums">{formatCurrency(goal.weeklyRequired || 0, currency)}</p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Days Left</span>
-                  <p className="font-bold text-slate-800">{goal.daysRemaining} days</p>
+                  <span className="text-[10px] text-[#737373] uppercase font-semibold">Days Left</span>
+                  <p className="font-semibold text-[#171717]">{goal.daysRemaining}d</p>
                 </div>
               </div>
             </div>
@@ -380,40 +373,40 @@ export const InvestmentsPage: React.FC = () => {
       </div>
 
       {/* Investment Watchlist & IPO Tracker */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">Investment Watchlist & IPO Tracker</h2>
-          <p className="text-xs text-slate-500">
-            Track unverified and confirmed opportunities. Clearly distinguishes rumoured vs confirmed filings.
+          <h2 className="text-base font-bold text-[#171717]">Investment Watchlist &amp; IPO Tracker</h2>
+          <p className="text-xs text-[#737373]">
+            Track opportunities with verified filings vs rumoured assets.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {opportunities.map((opp) => (
             <div key={opp.id} className="fintech-card p-5 flex flex-col justify-between">
               <div>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-2.5">
                     {opp.logoUrl ? (
-                      <img src={opp.logoUrl} alt={opp.companyName} className="w-9 h-9 rounded-xl object-cover" />
+                      <img src={opp.logoUrl} alt={opp.companyName} className="w-8 h-8 rounded object-cover border border-[#E5E7EB]" />
                     ) : (
-                      <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-slate-600">
+                      <div className="w-8 h-8 rounded bg-[#F8F9FA] border border-[#E5E7EB] flex items-center justify-center font-bold text-xs text-[#171717]">
                         {opp.companyName[0]}
                       </div>
                     )}
                     <div>
-                      <h3 className="font-bold text-slate-900 text-sm leading-tight">{opp.companyName}</h3>
-                      <span className="text-[10px] text-slate-500 font-semibold">{opp.category}</span>
+                      <h3 className="font-semibold text-[#171717] text-xs leading-tight">{opp.companyName}</h3>
+                      <span className="text-[10px] text-[#737373]">{opp.category}</span>
                     </div>
                   </div>
 
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] font-medium px-2 py-0.5 rounded border ${
                       opp.status === 'CONFIRMED'
-                        ? 'bg-emerald-100 text-emerald-700'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : opp.status === 'UNVERIFIED'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-blue-100 text-blue-700'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-blue-50 text-blue-700 border-blue-200'
                     }`}
                   >
                     {opp.status}
@@ -422,45 +415,45 @@ export const InvestmentsPage: React.FC = () => {
 
                 {/* Unverified Callout Banner if applicable */}
                 {!opp.isVerified && (
-                  <div className="mt-3 p-2 bg-amber-50 border border-amber-200/80 rounded-lg flex items-start gap-1.5 text-[11px] text-amber-800">
-                    <AlertTriangle size={13} className="text-amber-600 shrink-0 mt-0.5" />
-                    <span>Unconfirmed / Unverified opportunity. Do not treat as confirmed date.</span>
+                  <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded flex items-start gap-1.5 text-[11px] text-amber-800">
+                    <AlertTriangle size={12} className="text-amber-700 shrink-0 mt-0.5" />
+                    <span>Unconfirmed filing. Do not treat dates as final.</span>
                   </div>
                 )}
 
-                <p className="mt-3 text-xs text-slate-600 leading-relaxed">{opp.description}</p>
+                <p className="mt-3 text-xs text-[#737373] leading-relaxed">{opp.description}</p>
 
-                <div className="mt-4 pt-3 border-t border-slate-100 space-y-1.5 text-xs">
+                <div className="mt-4 pt-3 border-t border-[#E5E7EB] space-y-1 text-xs">
                   {opp.priceBand && (
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Price Band:</span>
-                      <span className="font-semibold text-slate-800">{opp.priceBand}</span>
+                      <span className="text-[#737373]">Price Band:</span>
+                      <span className="font-medium text-[#171717]">{opp.priceBand}</span>
                     </div>
                   )}
                   {opp.expectedAmount > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Target Capital:</span>
-                      <span className="font-bold text-slate-900">{formatCurrency(opp.expectedAmount, currency)}</span>
+                      <span className="text-[#737373]">Target Capital:</span>
+                      <span className="font-semibold text-[#171717] tabular-nums">{formatCurrency(opp.expectedAmount, currency)}</span>
                     </div>
                   )}
                   {opp.officialSource && (
-                    <div className="flex justify-between text-[11px] text-slate-400">
+                    <div className="flex justify-between text-[11px] text-[#737373]">
                       <span>Source:</span>
-                      <span className="truncate max-w-[160px] text-slate-600">{opp.officialSource}</span>
+                      <span className="truncate max-w-[150px] text-[#171717]">{opp.officialSource}</span>
                     </div>
                   )}
                 </div>
               </div>
 
               {opp.infoUrl && (
-                <div className="mt-4 pt-3 border-t border-slate-100">
+                <div className="mt-4 pt-3 border-t border-[#E5E7EB]">
                   <a
                     href={opp.infoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1"
+                    className="text-xs text-teal-800 hover:text-teal-950 font-medium flex items-center gap-1"
                   >
-                    Official Portal <ExternalLink size={12} />
+                    Official Portal <ExternalLink size={11} />
                   </a>
                 </div>
               )}
@@ -471,54 +464,56 @@ export const InvestmentsPage: React.FC = () => {
 
       {/* Add Contribution Modal */}
       {selectedGoalForDeposit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="font-bold text-sm">Add Confirmed Savings</h3>
-              <button onClick={() => setSelectedGoalForDeposit(null)} className="text-slate-400 hover:text-white">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="fintech-card w-full max-w-sm overflow-hidden bg-white">
+            <div className="px-5 py-3.5 bg-[#F8F9FA] border-b border-[#E5E7EB] flex justify-between items-center">
+              <h3 className="font-semibold text-xs text-[#171717]">Add Confirmed Savings</h3>
+              <button onClick={() => setSelectedGoalForDeposit(null)} className="text-[#737373] hover:text-[#171717]">
+                <X size={15} />
+              </button>
             </div>
-            <form onSubmit={handleContributeSavings} className="p-6 space-y-4 text-xs">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <p className="font-bold text-slate-800">{selectedGoalForDeposit.title}</p>
-                <p className="text-slate-500">
+            <form onSubmit={handleContributeSavings} className="p-5 space-y-3.5 text-xs">
+              <div className="bg-[#F8F9FA] p-3 rounded border border-[#E5E7EB]">
+                <p className="font-semibold text-[#171717]">{selectedGoalForDeposit.title}</p>
+                <p className="text-[#737373] text-[11px] mt-0.5">
                   Target: {formatCurrency(selectedGoalForDeposit.targetAmount, currency)} | Current: {formatCurrency(selectedGoalForDeposit.currentAmount, currency)}
                 </p>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Confirmed Amount to Allocate (INR) *</label>
+                <label className="block font-medium text-[#171717] mb-1">Confirmed Amount to Allocate (INR) *</label>
                 <input
                   type="number"
                   required
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(e.target.value)}
                   placeholder="e.g. 5000"
-                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="fintech-input"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Funding Source / Notes</label>
+                <label className="block font-medium text-[#171717] mb-1">Funding Source / Notes</label>
                 <input
                   type="text"
                   value={depositNotes}
                   onChange={(e) => setDepositNotes(e.target.value)}
                   placeholder="e.g. Cleared PayPal invoice INV-2026-001"
-                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="fintech-input"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-[#E5E7EB]">
                 <button
                   type="button"
                   onClick={() => setSelectedGoalForDeposit(null)}
-                  className="px-4 py-2 border rounded-xl font-semibold text-slate-600"
+                  className="btn-secondary"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20"
+                  className="btn-primary"
                 >
                   Confirm Allocation
                 </button>
@@ -530,32 +525,34 @@ export const InvestmentsPage: React.FC = () => {
 
       {/* Add Opportunity Modal */}
       {showAddOppModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="font-bold text-sm">Track New Investment Opportunity</h3>
-              <button onClick={() => setShowAddOppModal(false)} className="text-slate-400 hover:text-white">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="fintech-card w-full max-w-md overflow-hidden bg-white">
+            <div className="px-5 py-3.5 bg-[#F8F9FA] border-b border-[#E5E7EB] flex justify-between items-center">
+              <h3 className="font-semibold text-xs text-[#171717]">Track Investment Opportunity</h3>
+              <button onClick={() => setShowAddOppModal(false)} className="text-[#737373] hover:text-[#171717]">
+                <X size={15} />
+              </button>
             </div>
-            <form onSubmit={handleAddOpportunity} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleAddOpportunity} className="p-5 space-y-3.5 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Company / Asset Name *</label>
+                <label className="block font-medium text-[#171717] mb-1">Company / Asset Name *</label>
                 <input
                   type="text"
                   required
                   value={oppName}
                   onChange={(e) => setOppName(e.target.value)}
                   placeholder="e.g. OpenAI Secondary / Reliance Retail IPO"
-                  className="w-full px-3 py-2 border rounded-xl"
+                  className="fintech-input"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Category</label>
+                  <label className="block font-medium text-[#171717] mb-1">Category</label>
                   <select
                     value={oppCategory}
                     onChange={(e) => setOppCategory(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl bg-white"
+                    className="fintech-input bg-white"
                   >
                     <option value="IPO">IPO</option>
                     <option value="STOCKS">Stocks</option>
@@ -565,11 +562,11 @@ export const InvestmentsPage: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Status</label>
+                  <label className="block font-medium text-[#171717] mb-1">Status</label>
                   <select
                     value={oppStatus}
                     onChange={(e) => setOppStatus(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl bg-white"
+                    className="fintech-input bg-white"
                   >
                     <option value="UNVERIFIED">Unverified / Rumoured</option>
                     <option value="ANNOUNCED">Announced</option>
@@ -580,48 +577,48 @@ export const InvestmentsPage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Target Capital (INR)</label>
+                  <label className="block font-medium text-[#171717] mb-1">Target Capital (INR)</label>
                   <input
                     type="number"
                     value={oppExpectedAmount}
                     onChange={(e) => setOppExpectedAmount(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl"
+                    className="fintech-input"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Indicative Price Band</label>
+                  <label className="block font-medium text-[#171717] mb-1">Indicative Price Band</label>
                   <input
                     type="text"
                     value={oppPriceBand}
                     onChange={(e) => setOppPriceBand(e.target.value)}
                     placeholder="e.g. ₹500 - ₹550"
-                    className="w-full px-3 py-2 border rounded-xl"
+                    className="fintech-input"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Official Information Source</label>
+                <label className="block font-medium text-[#171717] mb-1">Official Information Source</label>
                 <input
                   type="text"
                   value={oppOfficialSource}
                   onChange={(e) => setOppOfficialSource(e.target.value)}
                   placeholder="e.g. SEBI draft filing or company press release"
-                  className="w-full px-3 py-2 border rounded-xl"
+                  className="fintech-input"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-[#E5E7EB]">
                 <button
                   type="button"
                   onClick={() => setShowAddOppModal(false)}
-                  className="px-4 py-2 border rounded-xl font-semibold text-slate-600"
+                  className="btn-secondary"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold"
+                  className="btn-primary"
                 >
                   Track Asset
                 </button>
@@ -633,71 +630,73 @@ export const InvestmentsPage: React.FC = () => {
 
       {/* Add Goal Modal */}
       {showAddGoalModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="font-bold text-sm">Create New Financial Goal</h3>
-              <button onClick={() => setShowAddGoalModal(false)} className="text-slate-400 hover:text-white">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="fintech-card w-full max-w-md overflow-hidden bg-white">
+            <div className="px-5 py-3.5 bg-[#F8F9FA] border-b border-[#E5E7EB] flex justify-between items-center">
+              <h3 className="font-semibold text-xs text-[#171717]">Create Financial Goal</h3>
+              <button onClick={() => setShowAddGoalModal(false)} className="text-[#737373] hover:text-[#171717]">
+                <X size={15} />
+              </button>
             </div>
-            <form onSubmit={handleAddGoal} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleAddGoal} className="p-5 space-y-3.5 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Goal Title *</label>
+                <label className="block font-medium text-[#171717] mb-1">Goal Title *</label>
                 <input
                   type="text"
                   required
                   value={goalTitle}
                   onChange={(e) => setGoalTitle(e.target.value)}
                   placeholder="e.g. Prepare for Anthropic IPO Watch"
-                  className="w-full px-3 py-2 border rounded-xl"
+                  className="fintech-input"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Target Amount (INR) *</label>
+                  <label className="block font-medium text-[#171717] mb-1">Target Amount (INR) *</label>
                   <input
                     type="number"
                     required
                     value={goalTargetAmount}
                     onChange={(e) => setGoalTargetAmount(e.target.value)}
                     placeholder="25000"
-                    className="w-full px-3 py-2 border rounded-xl"
+                    className="fintech-input"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Initial Deposit (INR)</label>
+                  <label className="block font-medium text-[#171717] mb-1">Initial Deposit (INR)</label>
                   <input
                     type="number"
                     value={goalInitial}
                     onChange={(e) => setGoalInitial(e.target.value)}
                     placeholder="8000"
-                    className="w-full px-3 py-2 border rounded-xl"
+                    className="fintech-input"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Target Date *</label>
+                <label className="block font-medium text-[#171717] mb-1">Target Date *</label>
                 <input
                   type="date"
                   required
                   value={goalTargetDate}
                   onChange={(e) => setGoalTargetDate(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl"
+                  className="fintech-input"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-[#E5E7EB]">
                 <button
                   type="button"
                   onClick={() => setShowAddGoalModal(false)}
-                  className="px-4 py-2 border rounded-xl font-semibold text-slate-600"
+                  className="btn-secondary"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold"
+                  className="btn-primary"
                 >
                   Save Goal
                 </button>

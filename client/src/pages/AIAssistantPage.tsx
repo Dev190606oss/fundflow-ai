@@ -2,15 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Bot,
   Send,
-  Sparkles,
-  User,
   ShieldCheck,
-  TrendingUp,
-  Receipt,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  HelpCircle,
+  Loader2,
 } from 'lucide-react';
 import { aiApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -28,7 +21,7 @@ export const AIAssistantPage: React.FC = () => {
     {
       id: 'welcome',
       role: 'assistant',
-      content: `Hello! I am your **FundFlow AI Financial Assistant**.\n\nI have direct, authorized access to your live database:\n• Invoices & PayPal settlements\n• Freelance clients & contracts\n• Money lent and borrowed ledgers\n• Investment watchlist & IPO savings goals\n\nHow can I help optimize your money today?`,
+      content: `Hello! I am your **FundFlow AI Financial Assistant**.\n\nI have direct, authorized access to your live financial records:\n• Invoices & PayPal settlements\n• Freelance clients & contracts\n• Money lent and borrowed ledgers\n• Investment watchlist & IPO savings goals\n\nHow can I help optimize your money today?`,
       timestamp: new Date(),
     },
   ]);
@@ -94,28 +87,30 @@ export const AIAssistantPage: React.FC = () => {
   ];
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto h-[calc(100vh-5rem)] flex flex-col animate-fadeIn">
+    <div className="p-6 lg:p-8 max-w-5xl mx-auto h-[calc(100vh-4.5rem)] flex flex-col">
       {/* Top Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+      <div className="flex items-center justify-between pb-4 border-b border-[#E5E7EB]">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/30">
-            <Bot size={22} />
+          <div className="w-9 h-9 rounded-lg bg-[#171717] flex items-center justify-center text-white">
+            <Bot size={18} />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              AI Financial Command Assistant
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-bold text-[#171717] tracking-tight">
+                AI Financial Assistant
+              </h1>
+              <span className="text-[10px] bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded font-medium">
                 Live Data Connected
               </span>
-            </h1>
-            <p className="text-xs text-slate-500">
-              Query cash balances, overdue receivables, lending recovery, and savings targets.
+            </div>
+            <p className="text-xs text-[#737373]">
+              Query cash balances, overdue receivables, peer lending recovery, and savings plans.
             </p>
           </div>
         </div>
 
-        <div className="hidden sm:flex items-center space-x-1.5 text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
-          <ShieldCheck size={14} className="text-blue-600" />
+        <div className="hidden sm:flex items-center space-x-1.5 text-xs text-[#737373] bg-[#F8F9FA] px-2.5 py-1 rounded border border-[#E5E7EB]">
+          <ShieldCheck size={13} className="text-teal-700" />
           <span>Strict DB Isolation</span>
         </div>
       </div>
@@ -126,7 +121,7 @@ export const AIAssistantPage: React.FC = () => {
           <button
             key={i}
             onClick={() => handleSend(prompt)}
-            className="text-xs bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-600 px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm transition font-medium text-left"
+            className="text-xs bg-[#F8F9FA] hover:bg-white hover:text-[#171717] text-[#737373] px-2.5 py-1 rounded border border-[#E5E7EB] transition text-left"
           >
             {prompt}
           </button>
@@ -134,73 +129,69 @@ export const AIAssistantPage: React.FC = () => {
       </div>
 
       {/* Chat Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2 py-2">
+      <div className="flex-1 overflow-y-auto space-y-3 pr-2 py-2">
         {messages.map((m) => (
           <div
             key={m.id}
-            className={`flex items-start space-x-3 ${m.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
+            className={`flex items-start space-x-2.5 ${m.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
           >
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+              className={`w-7 h-7 rounded flex items-center justify-center shrink-0 text-xs font-mono font-bold ${
                 m.role === 'user'
-                  ? 'bg-blue-600 text-white font-bold text-xs ring-2 ring-blue-500/20'
-                  : 'bg-slate-900 text-blue-400 border border-slate-800'
+                  ? 'bg-teal-700 text-white'
+                  : 'bg-[#171717] text-white'
               }`}
             >
-              {m.role === 'user' ? user?.name?.[0]?.toUpperCase() || 'U' : <Bot size={17} />}
+              {m.role === 'user' ? user?.name?.[0]?.toUpperCase() || 'U' : <Bot size={14} />}
             </div>
 
             <div
-              className={`max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed shadow-sm ${
+              className={`max-w-[85%] rounded-lg p-3.5 text-xs leading-relaxed ${
                 m.role === 'user'
-                  ? 'bg-blue-600 text-white font-medium rounded-tr-none'
-                  : 'bg-white border border-slate-200/80 text-slate-800 rounded-tl-none whitespace-pre-wrap'
+                  ? 'bg-[#171717] text-white font-medium'
+                  : 'fintech-card text-[#171717] whitespace-pre-wrap'
               }`}
             >
               {m.content}
             </div>
           </div>
         ))}
-
         {loading && (
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-full bg-slate-900 text-blue-400 flex items-center justify-center">
-              <Bot size={17} />
-            </div>
-            <div className="bg-white border border-slate-200 rounded-2xl p-3.5 rounded-tl-none shadow-sm flex items-center space-x-2 text-xs text-slate-500">
-              <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></div>
-              <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse delay-75"></div>
-              <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse delay-150"></div>
-              <span>Querying database balance sheet...</span>
-            </div>
+          <div className="flex items-center space-x-2 text-xs text-[#737373] pl-9">
+            <Loader2 size={13} className="animate-spin text-teal-700" />
+            <span>Analyzing ledger data...</span>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input Form */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSend();
-        }}
-        className="pt-3 border-t border-slate-200 flex items-center gap-2"
-      >
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask anything about earnings, invoices, loans, or savings readiness..."
-          className="flex-1 px-4 py-3 bg-white border border-slate-300 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
-        />
-        <button
-          type="submit"
-          disabled={!input.trim() || loading}
-          className="p-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-md shadow-blue-500/20 transition"
+      <div className="pt-3 border-t border-[#E5E7EB]">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSend();
+          }}
+          className="flex gap-2"
         >
-          <Send size={16} />
-        </button>
-      </form>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask about your finances, invoices, borrowers, or savings goals..."
+            className="fintech-input flex-1 text-xs"
+            disabled={loading}
+          />
+          <button
+            type="submit"
+            disabled={loading || !input.trim()}
+            className="btn-primary flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Send size={13} />
+            <span>Send</span>
+          </button>
+        </form>
+      </div>
     </div>
   );
 };
