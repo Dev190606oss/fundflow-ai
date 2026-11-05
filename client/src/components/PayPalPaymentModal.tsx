@@ -155,7 +155,7 @@ export const PayPalPaymentModal: React.FC<PayPalPaymentModalProps> = ({
               </div>
 
               <div>
-                <h4 className="text-sm font-bold text-neutral-900">Payment Captured & Verified</h4>
+                <h4 className="text-sm font-bold text-neutral-900">Payment Captured and Verified</h4>
                 <p className="text-xs text-neutral-500 mt-0.5">
                   Invoice <span className="font-mono font-medium text-neutral-700">{invoice.invoiceNumber}</span> is now marked as <strong>PAID</strong>.
                 </p>
@@ -180,7 +180,7 @@ export const PayPalPaymentModal: React.FC<PayPalPaymentModalProps> = ({
                 onClick={onClose}
                 className="w-full py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-md text-xs font-semibold transition"
               >
-                Close & Return
+                Close and Return
               </button>
             </div>
           )}

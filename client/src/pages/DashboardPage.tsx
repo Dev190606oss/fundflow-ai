@@ -228,7 +228,7 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate }) => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
-                Monthly Inflows & Outflows
+                Monthly Inflows and Outflows
               </h3>
               <p className="text-[11px] text-neutral-500">Live transaction trends</p>
             </div>
@@ -361,7 +361,7 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate }) => {
               <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
                 Upcoming Peer Repayments
               </h3>
-              <p className="text-[11px] text-neutral-500">Scheduled lending & borrowing</p>
+              <p className="text-[11px] text-neutral-500">Scheduled lending and borrowing</p>
             </div>
             <button
               onClick={() => onNavigate('borrow-lend')}

@@ -69,3 +69,13 @@ server/dist/
 *.db
 *.db-journal
 *.sqlite
+
+# Security audit & scanning artifacts
+.semgrep-rules/
+semgrep-*.json
+trivy-results.json
+gitleaks-results.json
+trufflehog-*.json
+zap/
+nuclei-*.txt
+

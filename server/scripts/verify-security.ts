@@ -298,6 +298,62 @@ async function runAudit() {
   }
 
   // -------------------------------------------------------------
+  // Test 9: PayPal Order Tenant Isolation (Cross-User Order Injection Blocked)
+  // -------------------------------------------------------------
+  try {
+    const demoInvoice = await prisma.invoice.findFirst({
+      where: { userId: demoUser.id },
+    });
+
+    if (demoInvoice) {
+      // User B attempts to create a PayPal checkout order for Demo User's invoice
+      const crossOrderRes = await fetch(`${API_BASE}/paypal/create-order`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${userBToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ invoiceId: demoInvoice.id }),
+      });
+
+      assert(
+        'PayPal Security',
+        'Cross-User PayPal Order Creation Blocked',
+        crossOrderRes.status === 404,
+        `User B creating order for User A invoice returned ${crossOrderRes.status} (Expected 404 Not Found)`
+      );
+    } else {
+      assert('PayPal Security', 'Cross-User PayPal Order Creation Blocked', true, 'Skipped: No invoice in test DB');
+    }
+  } catch (err: any) {
+    assert('PayPal Security', 'PayPal Tenant Isolation', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // Test 10: AI Security - Input Schema Validation & Prompt Guard
+  // -------------------------------------------------------------
+  try {
+    // Malformed/empty prompt to AI endpoint
+    const aiRes = await fetch(`${API_BASE}/ai/project-brief`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${demoToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ prompt: ' ' }), // Blank prompt violates min(5) length schema
+    });
+
+    assert(
+      'AI Security',
+      'AI Malformed Prompt Schema Enforcement',
+      aiRes.status === 400,
+      `Blank/malformed AI prompt rejected with ${aiRes.status} Bad Request`
+    );
+  } catch (err: any) {
+    assert('AI Security', 'AI Schema Validation', false, err.message);
+  }
+
+  // -------------------------------------------------------------
   // Clean up User B
   // -------------------------------------------------------------
   await prisma.user.deleteMany({ where: { id: userB.id } });
