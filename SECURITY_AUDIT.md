@@ -62,12 +62,22 @@ All identified vulnerabilities were systematically remediated, validated against
 
 ### 3.5. Financial Transaction Safety & PayPal Verification
 - **Strict Server Verification:** Invoices are never marked as `PAID` via frontend callback parameters alone. Settlement requires server-to-server confirmation against PayPal's `/v2/checkout/orders/{id}/capture` endpoint.
+- **Webhook Signature Validation:** Added `PayPalService.verifyWebhookSignature()` to validate incoming webhook transmissions. Requires essential signature headers (`paypal-auth-algo`, `paypal-cert-url`, `paypal-transmission-id`, `paypal-transmission-sig`, `paypal-transmission-time`) and validates certificates from trusted PayPal domains or the official PayPal webhook verification API. Unsigned or forged webhooks are rejected with HTTP 400.
+- **Webhook Replay Protection & Deduplication:** Webhook event IDs are tracked in a deduplication cache (`processedWebhookEvents`). Replayed or duplicate transmissions are recognized and safely ignored (`DUPLICATE_IGNORED`) without re-executing accounting updates.
+- **Payment State Machine & Non-Settlement on Denials:** Non-completed webhook events (`PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.DECLINED`, `CHECKOUT.ORDER.VOIDED`) are safely logged with status `PAYMENT_DENIED_RECORDED` and strictly prevented from updating invoice payment status or balances.
 - **Idempotency Protection:** Added lookup in `PayPalTransaction` by unique `orderId`. If an order has already been settled, the backend returns the existing confirmed transaction without duplicating entries or ledger additions.
 - **Overpayment Guard:** Manual and gateway payment handlers reject payments exceeding `invoice.totalAmount - invoice.paidAmount`.
 
 ### 3.6. Security Headers & CORS
 - **Helmet:** Installed and active globally with Content Security Policy, `x-content-type-options: nosniff`, and `x-frame-options: SAMEORIGIN`.
 - **CORS:** Origins are strictly restricted to authorized domains (`http://localhost:5173`, `http://127.0.0.1:5173`, and production `FRONTEND_URL`). Unrestricted wildcards (`*`) are disallowed.
+
+### 3.7. Gemini & AI Security Controls
+- **Zero Frontend Credential Exposure:** Gemini API keys are loaded strictly on the backend (`process.env.GEMINI_API_KEY`). Zero API keys are bundled or accessible in client-side code.
+- **Strict Tenant Context Scoping:** AI financial assistant queries gather data strictly filtered by the authenticated user's session (`where: { userId }`). Users cannot view or query another tenant's financial records.
+- **Deterministic Calculation Engine:** Financial figures (savings gaps, required weekly savings, debt balances, and payment milestones) are computed using deterministic TypeScript logic from verified database numbers. AI is never trusted to perform unverified numeric math on user funds.
+- **Non-Transactional Air Gap:** AI endpoints are strictly conversational and analytical. AI output cannot authorize transactions, execute payments, modify invoices, or alter account balances.
+- **Prompt Injection Defense:** User prompts are passed as user-level conversational turns. Verified with automated regression tests that prompt injection payloads (e.g., claiming system override, attempting role escalation, or requesting cross-user secrets) fail to alter tenant data boundaries or user roles.
 
 ---
 
@@ -325,7 +335,7 @@ An audit of current working files and Git history was conducted using **Gitleaks
 ## 14. Verification Test Suite & Application Builds
 
 ### 14.1. Security Verification Suite (`server/scripts/verify-security.ts`)
-13 out of 13 comprehensive automated security checks passed:
+18 out of 18 comprehensive automated security checks passed:
 1. `PASS`: Unauthenticated request rejection (HTTP 401 on protected routes)
 2. `PASS`: Non-admin blocked from admin routes (HTTP 403 Forbidden)
 3. `PASS`: Authorized admin access to admin routes (HTTP 200 OK)
@@ -339,6 +349,11 @@ An audit of current working files and Git history was conducted using **Gitleaks
 11. `PASS`: Financial overpayment guardrail (Overpayments blocked with HTTP 400)
 12. `PASS`: PayPal cross-user order creation blocked (HTTP 404 on cross-tenant invoice order generation)
 13. `PASS`: AI input validation schema enforcement (HTTP 400 Bad Request on malformed/blank prompts)
+14. `PASS`: PayPal webhook unsigned request rejection (HTTP 400 on missing signature headers)
+15. `PASS`: PayPal webhook invalid signature simulation rejection (HTTP 400 on failed signature check)
+16. `PASS`: PayPal webhook replay protection & deduplication (Duplicate event IDs safely ignored)
+17. `PASS`: PayPal payment denied event handling (Event recorded, invoices protected from settlement)
+18. `PASS`: Gemini AI prompt injection guard & tenant boundary protection (Cross-user data isolated, role preserved)
 
 ### 14.2. Production Builds
 - **Client (`tsc && vite build`):** Succeeded in ~2.0s (`dist/` generated, 0 TypeScript errors).

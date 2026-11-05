@@ -93,14 +93,27 @@ router.get('/history', requireAuth, async (req: AuthenticatedRequest, res: Respo
   }
 });
 
-// Webhook listener
-router.post('/webhook', async (req, res) => {
+// Webhook listener with signature verification & replay protection
+router.post('/webhook', async (req, res): Promise<void> => {
   try {
-    // In PayPal production, signature headers (PAYPAL-AUTH-ALGO, PAYPAL-CERT-URL, etc.) are verified
-    console.log('🔔 Received PayPal Webhook Event:', req.body?.event_type || 'Custom Event');
-    res.status(200).json({ received: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Webhook processing error.' });
+    const signatureCheck = await PayPalService.verifyWebhookSignature({
+      headers: req.headers,
+      body: req.body,
+    });
+
+    if (!signatureCheck.verified) {
+      res.status(400).json({
+        error: 'Invalid PayPal webhook signature.',
+        details: signatureCheck.error,
+      });
+      return;
+    }
+
+    const result = await PayPalService.processWebhookEvent(req.body);
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error('PayPal webhook processing error:', error);
+    res.status(500).json({ error: error.message || 'Webhook processing error.' });
   }
 });
 
