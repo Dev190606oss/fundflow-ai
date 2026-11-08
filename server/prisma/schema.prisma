@@ -361,3 +361,13 @@ model AIInsight {
 
   @@map("ai_insights")
 }
+
+model ProcessedWebhookEvent {
+  id        String   @id // PayPal Event ID (e.g. WH-...)
+  eventType String
+  status    String   // PROCESSED, IGNORED, DENIED
+  createdAt DateTime @default(now())
+
+  @@map("processed_webhook_events")
+}
+

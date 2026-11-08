@@ -299,8 +299,8 @@ export class PayPalService {
     };
   }
 
-  // In-memory set of processed webhook event IDs for replay protection
-  private static processedWebhookEvents = new Set<string>();
+  // Standard sandbox exchange rate (or from process.env)
+  private static exchangeRateINRtoUSD = Number(process.env.PAYPAL_EXCHANGE_RATE_INR_PER_USD) || 85.0;
 
   /**
    * Verify PayPal Webhook Signature
@@ -328,6 +328,14 @@ export class PayPalService {
     }
 
     const webhookId = process.env.PAYPAL_WEBHOOK_ID;
+
+    // In production, missing credentials or missing PAYPAL_WEBHOOK_ID must fail closed
+    if (process.env.NODE_ENV === 'production' && (!this.isConfigured() || !webhookId)) {
+      return {
+        verified: false,
+        error: 'Missing required PayPal production credentials or PAYPAL_WEBHOOK_ID.',
+      };
+    }
 
     // If live/sandbox credentials and webhook ID are configured, verify with official PayPal API
     if (this.isConfigured() && webhookId) {
@@ -359,7 +367,7 @@ export class PayPalService {
           }
           return { verified: false, error: `PayPal verification status: ${data.verification_status}` };
         }
-        return { verified: false, error: 'PayPal signature verification endpoint returned non-200.' };
+        return { verified: false, error: `PayPal signature verification endpoint returned HTTP ${response.status}.` };
       } catch (err: any) {
         return { verified: false, error: err.message || 'Signature verification network error.' };
       }
@@ -376,7 +384,7 @@ export class PayPalService {
   }
 
   /**
-   * Process Verified Webhook Event with Replay Protection & Idempotency
+   * Process Verified Webhook Event with Database Persistence & Race-Condition Protection
    */
   public static async processWebhookEvent(event: any): Promise<{
     processed: boolean;
@@ -388,24 +396,53 @@ export class PayPalService {
       throw new Error('Webhook event payload missing unique event ID.');
     }
 
-    // Replay Protection: Check if event has already been processed
-    if (this.processedWebhookEvents.has(eventId)) {
+    // 1. Persistent Replay Protection: Check if event is already in PostgreSQL
+    const existingDbEvent = await prisma.processedWebhookEvent.findUnique({
+      where: { id: eventId },
+    });
+
+    if (existingDbEvent) {
       return {
         processed: false,
         status: 'DUPLICATE_IGNORED',
-        details: `Webhook event ${eventId} already processed (Replay protection active).`,
+        details: `Webhook event ${eventId} already processed (Database replay protection active).`,
       };
     }
 
     const eventType = event.event_type;
 
-    // Handle Payment Denied / Failed / Canceled: Never mark as paid
+    // 2. Concurrency Lock: Atomically claim event ID in database via unique primary key constraint
+    try {
+      await prisma.processedWebhookEvent.create({
+        data: {
+          id: eventId,
+          eventType,
+          status: 'PROCESSING',
+        },
+      });
+    } catch (err: any) {
+      // P2002 = Prisma Unique constraint violation
+      if (err.code === 'P2002') {
+        return {
+          processed: false,
+          status: 'DUPLICATE_IGNORED',
+          details: `Webhook event ${eventId} concurrent request intercepted by database unique constraint.`,
+        };
+      }
+      throw err;
+    }
+
+    // 3. Handle Payment Denied / Failed / Canceled: Never mark as paid
     if (
       eventType === 'PAYMENT.CAPTURE.DENIED' ||
       eventType === 'PAYMENT.CAPTURE.DECLINED' ||
       eventType === 'CHECKOUT.ORDER.VOIDED'
     ) {
-      this.processedWebhookEvents.add(eventId);
+      await prisma.processedWebhookEvent.update({
+        where: { id: eventId },
+        data: { status: 'DENIED' },
+      });
+
       return {
         processed: true,
         status: 'PAYMENT_DENIED_RECORDED',
@@ -413,55 +450,125 @@ export class PayPalService {
       };
     }
 
-    // Handle Payment Capture Completed
+    // 4. Handle Payment Capture Completed
     if (eventType === 'PAYMENT.CAPTURE.COMPLETED') {
       const resource = event.resource;
       const customId = resource?.custom_id || resource?.supplementary_data?.related_ids?.order_id;
       const invoiceId = customId;
+      const amountValue = Number(resource?.amount?.value);
+      const currencyCode = resource?.amount?.currency_code || 'USD';
 
-      if (invoiceId) {
-        const invoice = await prisma.invoice.findUnique({
-          where: { id: invoiceId },
+      if (!invoiceId) {
+        await prisma.processedWebhookEvent.update({
+          where: { id: eventId },
+          data: { status: 'MISSING_INVOICE_ID' },
         });
-
-        if (invoice) {
-          // If invoice is already paid, do not duplicate
-          if (invoice.status === InvoiceStatus.PAID) {
-            this.processedWebhookEvents.add(eventId);
-            return {
-              processed: true,
-              status: 'ALREADY_PAID',
-              details: `Invoice ${invoice.invoiceNumber} is already marked as paid.`,
-            };
-          }
-
-          // Atomic settlement
-          await prisma.$transaction(async (tx) => {
-            await tx.invoice.update({
-              where: { id: invoice.id },
-              data: {
-                status: InvoiceStatus.PAID,
-                paidAmount: invoice.totalAmount,
-              },
-            });
-            await tx.client.update({
-              where: { id: invoice.clientId },
-              data: { paymentStatus: 'Paid' },
-            });
-          });
-        }
+        return {
+          processed: false,
+          status: 'MISSING_INVOICE_ID',
+          details: 'Event missing custom_id / invoice identifier.',
+        };
       }
 
-      this.processedWebhookEvents.add(eventId);
+      const invoice = await prisma.invoice.findUnique({
+        where: { id: invoiceId },
+      });
+
+      if (!invoice) {
+        await prisma.processedWebhookEvent.update({
+          where: { id: eventId },
+          data: { status: 'INVOICE_NOT_FOUND' },
+        });
+        return {
+          processed: false,
+          status: 'INVOICE_NOT_FOUND',
+          details: `Invoice ${invoiceId} not found in database.`,
+        };
+      }
+
+      // If invoice is already paid, do not duplicate
+      if (invoice.status === InvoiceStatus.PAID) {
+        await prisma.processedWebhookEvent.update({
+          where: { id: eventId },
+          data: { status: 'ALREADY_PAID' },
+        });
+        return {
+          processed: true,
+          status: 'ALREADY_PAID',
+          details: `Invoice ${invoice.invoiceNumber} is already marked as paid.`,
+        };
+      }
+
+      // Currency Verification
+      // Standardize: if invoice in INR, sandbox captures in USD
+      const expectedCurrency = 'USD';
+      if (currencyCode !== expectedCurrency && currencyCode !== 'INR') {
+        await prisma.processedWebhookEvent.update({
+          where: { id: eventId },
+          data: { status: 'CURRENCY_MISMATCH_REJECTED' },
+        });
+        return {
+          processed: false,
+          status: 'CURRENCY_MISMATCH_REJECTED',
+          details: `Captured currency ${currencyCode} does not match expected currency (${expectedCurrency} / INR).`,
+        };
+      }
+
+      // Amount Verification (Accounting precision & underpayment guard)
+      const balanceDue = invoice.totalAmount - invoice.paidAmount;
+      const expectedAmountInUSD = Math.round((balanceDue / this.exchangeRateINRtoUSD) * 100) / 100;
+      const expectedAmountInINR = balanceDue;
+
+      const paidSufficiently =
+        currencyCode === 'USD'
+          ? amountValue >= expectedAmountInUSD - 0.05 // 5 cents rounding tolerance
+          : amountValue >= expectedAmountInINR - 1.0; // 1 rupee rounding tolerance
+
+      if (!paidSufficiently) {
+        await prisma.processedWebhookEvent.update({
+          where: { id: eventId },
+          data: { status: 'UNDERPAYMENT_REJECTED' },
+        });
+        return {
+          processed: false,
+          status: 'UNDERPAYMENT_REJECTED',
+          details: `Captured amount ${amountValue} ${currencyCode} is insufficient for balance due (Expected ~${expectedAmountInUSD} USD / ₹${expectedAmountInINR}).`,
+        };
+      }
+
+      // Atomic settlement
+      await prisma.$transaction(async (tx) => {
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: InvoiceStatus.PAID,
+            paidAmount: invoice.totalAmount,
+          },
+        });
+        await tx.client.update({
+          where: { id: invoice.clientId },
+          data: { paymentStatus: 'Paid' },
+        });
+      });
+
+      await prisma.processedWebhookEvent.update({
+        where: { id: eventId },
+        data: { status: 'SETTLED' },
+      });
+
       return {
         processed: true,
         status: 'CAPTURE_SETTLED',
-        details: `Event ${eventId} settled successfully.`,
+        details: `Event ${eventId} settled successfully for invoice ${invoice.invoiceNumber}.`,
       };
     }
 
     // Acknowledge other event types safely
-    this.processedWebhookEvents.add(eventId);
+    await prisma.processedWebhookEvent.update({
+      where: { id: eventId },
+      data: { status: 'ACKNOWLEDGED' },
+    });
+
     return {
       processed: true,
       status: 'ACKNOWLEDGED',

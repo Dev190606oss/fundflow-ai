@@ -513,6 +513,196 @@ async function runAudit() {
   }
 
   // -------------------------------------------------------------
+  // Test 16: Persistent Webhook Replay Protection (PostgreSQL DB Survival)
+  // -------------------------------------------------------------
+  try {
+    const persistedEventId = `WH-PERSIST-TEST-${Date.now()}`;
+    // Directly pre-insert into PostgreSQL database (simulating event recorded prior to process restart)
+    await prisma.processedWebhookEvent.create({
+      data: {
+        id: persistedEventId,
+        eventType: 'PAYMENT.CAPTURE.COMPLETED',
+        status: 'SETTLED',
+      },
+    });
+
+    const validHeaders = {
+      'Content-Type': 'application/json',
+      'paypal-auth-algo': 'SHA256withRSA',
+      'paypal-cert-url': 'https://api.sandbox.paypal.com/v1/notifications/certs/CERT-123',
+      'paypal-transmission-id': 'TRANS-PERSIST-1',
+      'paypal-transmission-sig': 'VALID_MOCK_SIG',
+      'paypal-transmission-time': new Date().toISOString(),
+    };
+
+    // Attempt replay of persisted event
+    const persistReplayRes = await fetch(`${API_BASE}/paypal/webhook`, {
+      method: 'POST',
+      headers: validHeaders,
+      body: JSON.stringify({ id: persistedEventId, event_type: 'PAYMENT.CAPTURE.COMPLETED' }),
+    });
+    const persistData = await persistReplayRes.json();
+
+    assert(
+      'PayPal Webhook Security',
+      'Persistent Database-Backed Replay Protection',
+      persistData.status === 'DUPLICATE_IGNORED',
+      `Replayed event matched PostgreSQL record: ${persistData.status} (Protected across restarts)`
+    );
+
+    await prisma.processedWebhookEvent.deleteMany({ where: { id: persistedEventId } });
+  } catch (err: any) {
+    assert('PayPal Webhook Security', 'Persistent Database Replay Protection', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // Test 17: Concurrent Duplicate Webhook Requests (Atomic Race-Condition Lock)
+  // -------------------------------------------------------------
+  try {
+    const concurrentEventId = `WH-RACE-TEST-${Date.now()}`;
+    const validHeaders = {
+      'Content-Type': 'application/json',
+      'paypal-auth-algo': 'SHA256withRSA',
+      'paypal-cert-url': 'https://api.sandbox.paypal.com/v1/notifications/certs/CERT-123',
+      'paypal-transmission-id': 'TRANS-CONCURRENT-1',
+      'paypal-transmission-sig': 'VALID_MOCK_SIG',
+      'paypal-transmission-time': new Date().toISOString(),
+    };
+
+    const reqPayload = JSON.stringify({ id: concurrentEventId, event_type: 'CHECKOUT.ORDER.APPROVED' });
+
+    // Fire 2 concurrent HTTP requests with identical event ID
+    const [resA, resB] = await Promise.all([
+      fetch(`${API_BASE}/paypal/webhook`, { method: 'POST', headers: validHeaders, body: reqPayload }),
+      fetch(`${API_BASE}/paypal/webhook`, { method: 'POST', headers: validHeaders, body: reqPayload }),
+    ]);
+
+    const dataA = await resA.json();
+    const dataB = await resB.json();
+
+    const oneAcknowledged = dataA.status === 'ACKNOWLEDGED' || dataB.status === 'ACKNOWLEDGED';
+    const oneDuplicateIgnored = dataA.status === 'DUPLICATE_IGNORED' || dataB.status === 'DUPLICATE_IGNORED';
+
+    assert(
+      'PayPal Webhook Security',
+      'Concurrent Webhook Atomic Lock & Race Condition Protection',
+      oneAcknowledged && oneDuplicateIgnored,
+      `Concurrent requests: [${dataA.status}, ${dataB.status}] - Exactly one processed, other deduplicated`
+    );
+
+    await prisma.processedWebhookEvent.deleteMany({ where: { id: concurrentEventId } });
+  } catch (err: any) {
+    assert('PayPal Webhook Security', 'Concurrent Webhook Race Protection', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // Test 18: Webhook Underpayment / Amount Tampering Rejection
+  // -------------------------------------------------------------
+  try {
+    const samplePendingInvoice = await prisma.invoice.findFirst({
+      where: { userId: demoUser.id, status: 'PENDING' },
+    });
+
+    if (samplePendingInvoice) {
+      const underpayEventId = `WH-UNDERPAY-TEST-${Date.now()}`;
+      const validHeaders = {
+        'Content-Type': 'application/json',
+        'paypal-auth-algo': 'SHA256withRSA',
+        'paypal-cert-url': 'https://api.sandbox.paypal.com/v1/notifications/certs/CERT-123',
+        'paypal-transmission-id': 'TRANS-UNDERPAY-1',
+        'paypal-transmission-sig': 'VALID_MOCK_SIG',
+        'paypal-transmission-time': new Date().toISOString(),
+      };
+
+      // Malicious webhook reporting capture of only $0.01 for a full invoice
+      const underpayPayload = {
+        id: underpayEventId,
+        event_type: 'PAYMENT.CAPTURE.COMPLETED',
+        resource: {
+          custom_id: samplePendingInvoice.id,
+          amount: { value: '0.01', currency_code: 'USD' },
+        },
+      };
+
+      const underpayRes = await fetch(`${API_BASE}/paypal/webhook`, {
+        method: 'POST',
+        headers: validHeaders,
+        body: JSON.stringify(underpayPayload),
+      });
+      const underpayData = await underpayRes.json();
+
+      // Verify invoice was NOT settled
+      const invoiceCheck = await prisma.invoice.findUnique({ where: { id: samplePendingInvoice.id } });
+
+      assert(
+        'PayPal Financial Integrity',
+        'Webhook Underpayment Tampering Rejection',
+        underpayData.status === 'UNDERPAYMENT_REJECTED' && invoiceCheck?.status === 'PENDING',
+        `Underpayment ($0.01) rejected: status=${underpayData.status}, invoice status remains ${invoiceCheck?.status}`
+      );
+
+      await prisma.processedWebhookEvent.deleteMany({ where: { id: underpayEventId } });
+    } else {
+      assert('PayPal Financial Integrity', 'Webhook Underpayment Tampering Rejection', true, 'Skipped: No pending invoice in test DB');
+    }
+  } catch (err: any) {
+    assert('PayPal Financial Integrity', 'Webhook Underpayment Rejection', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // Test 19: Webhook Currency Mismatch Rejection
+  // -------------------------------------------------------------
+  try {
+    const samplePendingInvoice = await prisma.invoice.findFirst({
+      where: { userId: demoUser.id, status: 'PENDING' },
+    });
+
+    if (samplePendingInvoice) {
+      const currencyMismatchEventId = `WH-CURRENCY-TEST-${Date.now()}`;
+      const validHeaders = {
+        'Content-Type': 'application/json',
+        'paypal-auth-algo': 'SHA256withRSA',
+        'paypal-cert-url': 'https://api.sandbox.paypal.com/v1/notifications/certs/CERT-123',
+        'paypal-transmission-id': 'TRANS-CURRENCY-1',
+        'paypal-transmission-sig': 'VALID_MOCK_SIG',
+        'paypal-transmission-time': new Date().toISOString(),
+      };
+
+      // Webhook reporting capture in unsupported currency (EUR instead of USD/INR)
+      const currencyMismatchPayload = {
+        id: currencyMismatchEventId,
+        event_type: 'PAYMENT.CAPTURE.COMPLETED',
+        resource: {
+          custom_id: samplePendingInvoice.id,
+          amount: { value: '1000.00', currency_code: 'EUR' },
+        },
+      };
+
+      const currencyRes = await fetch(`${API_BASE}/paypal/webhook`, {
+        method: 'POST',
+        headers: validHeaders,
+        body: JSON.stringify(currencyMismatchPayload),
+      });
+      const currencyData = await currencyRes.json();
+
+      const invoiceCheck = await prisma.invoice.findUnique({ where: { id: samplePendingInvoice.id } });
+
+      assert(
+        'PayPal Financial Integrity',
+        'Webhook Currency Mismatch Rejection',
+        currencyData.status === 'CURRENCY_MISMATCH_REJECTED' && invoiceCheck?.status === 'PENDING',
+        `Currency mismatch (EUR) rejected: status=${currencyData.status}, invoice status remains ${invoiceCheck?.status}`
+      );
+
+      await prisma.processedWebhookEvent.deleteMany({ where: { id: currencyMismatchEventId } });
+    } else {
+      assert('PayPal Financial Integrity', 'Webhook Currency Mismatch Rejection', true, 'Skipped: No pending invoice in test DB');
+    }
+  } catch (err: any) {
+    assert('PayPal Financial Integrity', 'Webhook Currency Mismatch Rejection', false, err.message);
+  }
+
+  // -------------------------------------------------------------
   // Clean up User B
   // -------------------------------------------------------------
   await prisma.user.deleteMany({ where: { id: userB.id } });
