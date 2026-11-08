@@ -1,74 +1,75 @@
 import { Router, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { PayPalService } from '../services/paypal.service';
+import { validateBody, createPayPalOrderSchema, capturePayPalOrderSchema } from '../middleware/validate.middleware';
 import prisma from '../prisma';
 
 const router = Router();
 
 // Create PayPal Sandbox Order
-router.post('/create-order', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { invoiceId } = req.body;
+router.post(
+  '/create-order',
+  requireAuth,
+  validateBody(createPayPalOrderSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { invoiceId } = req.body;
 
-    if (!invoiceId) {
-      res.status(400).json({ error: 'Invoice ID is required to initiate PayPal order.' });
-      return;
+      const invoice = await prisma.invoice.findFirst({
+        where: { id: invoiceId, userId: req.userId },
+        include: { client: true },
+      });
+
+      if (!invoice) {
+        res.status(404).json({ error: 'Invoice not found or unauthorized.' });
+        return;
+      }
+
+      if (invoice.status === 'PAID') {
+        res.status(400).json({ error: 'This invoice has already been fully paid.' });
+        return;
+      }
+
+      const remainingToPay = invoice.totalAmount - invoice.paidAmount;
+
+      const order = await PayPalService.createOrder({
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        amount: remainingToPay,
+        currency: 'INR',
+        description: `FundFlow AI - Invoice ${invoice.invoiceNumber} for ${invoice.client.name}`,
+      });
+
+      res.json(order);
+    } catch (error: any) {
+      console.error('PayPal create order error:', error);
+      res.status(500).json({ error: error.message || 'Failed to initiate PayPal order.' });
     }
-
-    const invoice = await prisma.invoice.findFirst({
-      where: { id: invoiceId, userId: req.userId },
-      include: { client: true },
-    });
-
-    if (!invoice) {
-      res.status(404).json({ error: 'Invoice not found or unauthorized.' });
-      return;
-    }
-
-    if (invoice.status === 'PAID') {
-      res.status(400).json({ error: 'This invoice has already been fully paid.' });
-      return;
-    }
-
-    const remainingToPay = invoice.totalAmount - invoice.paidAmount;
-
-    const order = await PayPalService.createOrder({
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-      amount: remainingToPay,
-      currency: 'INR',
-      description: `FundFlow AI - Invoice ${invoice.invoiceNumber} for ${invoice.client.name}`,
-    });
-
-    res.json(order);
-  } catch (error: any) {
-    console.error('PayPal create order error:', error);
-    res.status(500).json({ error: error.message || 'Failed to initiate PayPal order.' });
   }
-});
+);
 
 // Capture PayPal Sandbox Payment
-router.post('/capture-order', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { orderId, invoiceId } = req.body;
+router.post(
+  '/capture-order',
+  requireAuth,
+  validateBody(capturePayPalOrderSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { orderId, invoiceId } = req.body;
 
-    if (!orderId || !invoiceId) {
-      res.status(400).json({ error: 'Order ID and Invoice ID are required.' });
-      return;
+      const result = await PayPalService.captureAndVerifyPayment({
+        orderId,
+        invoiceId,
+        userId: req.userId!,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('PayPal capture order error:', error);
+      res.status(500).json({ error: error.message || 'Payment capture failed.' });
     }
-
-    const result = await PayPalService.captureAndVerifyPayment({
-      orderId,
-      invoiceId,
-      userId: req.userId!,
-    });
-
-    res.json(result);
-  } catch (error: any) {
-    console.error('PayPal capture order error:', error);
-    res.status(500).json({ error: error.message || 'Payment capture failed.' });
   }
-});
+);
 
 // PayPal Audit History for User
 router.get('/history', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {

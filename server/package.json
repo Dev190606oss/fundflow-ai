@@ -13,6 +13,7 @@
     "test:security": "tsx scripts/verify-security.ts",
     "test:comprehensive": "tsx scripts/run-comprehensive-verification.ts",
     "test:e2e": "tsx scripts/run-e2e-workflows.ts",
+    "test:advanced-security": "tsx scripts/run-advanced-security-assessment.ts",
     "seed": "tsx prisma/seed.ts"
   },
   "keywords": [

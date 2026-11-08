@@ -57,6 +57,19 @@ export const createClientSchema = z.object({
   paymentStatus: z.string().max(50).optional(),
 });
 
+export const updateClientSchema = z.object({
+  name: z.string().min(2, 'Client name is required').max(100).optional(),
+  email: z.string().email('Valid client email is required').max(255).optional(),
+  phone: z.string().max(30).optional().nullable(),
+  company: z.string().max(100).optional().nullable(),
+  projectDetails: z.string().max(1000).optional().nullable(),
+  contractAmount: z.coerce.number().min(0, 'Contract amount cannot be negative').optional(),
+  startDate: z.string().optional().nullable(),
+  deadline: z.string().optional().nullable(),
+  projectStatus: z.string().max(50).optional(),
+  paymentStatus: z.string().max(50).optional(),
+});
+
 // 3. Invoice Schemas
 export const invoiceItemSchema = z.object({
   description: z.string().min(1, 'Item description is required').max(255),
@@ -71,7 +84,13 @@ export const createInvoiceSchema = z.object({
   taxRate: z.coerce.number().min(0).max(100).default(0),
   discountAmount: z.coerce.number().min(0).default(0),
   notes: z.string().max(1000).optional().nullable(),
-  status: z.enum(['DRAFT', 'PENDING', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED']).optional(),
+  status: z.enum(['DRAFT', 'PENDING']).optional(),
+});
+
+export const updateInvoiceSchema = z.object({
+  dueDate: z.string().optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+  status: z.enum(['DRAFT', 'PENDING', 'CANCELLED']).optional(),
 });
 
 export const manualPaymentSchema = z.object({
@@ -143,8 +162,23 @@ export const aiReminderSchema = z.object({
 
 export const aiChatSchema = z.object({
   message: z.string().trim().min(1, 'Message cannot be empty').max(2000, 'Message exceeds 2000 characters'),
-  history: z.array(z.object({
-    role: z.string(),
-    content: z.string().max(3000),
-  })).optional(),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().max(3000),
+      })
+    )
+    .max(20)
+    .optional(),
+});
+
+// 7. PayPal Schemas
+export const createPayPalOrderSchema = z.object({
+  invoiceId: z.string().uuid('Invalid invoice ID format'),
+});
+
+export const capturePayPalOrderSchema = z.object({
+  invoiceId: z.string().uuid('Invalid invoice ID format'),
+  orderId: z.string().regex(/^[A-Za-z0-9_\-]{1,64}$/, 'Invalid PayPal order ID format'),
 });

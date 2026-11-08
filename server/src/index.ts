@@ -105,7 +105,7 @@ app.use('/api/', globalLimiter);
 // Stricter limiter for authentication endpoints (prevents credential stuffing & brute-force)
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: process.env.NODE_ENV === 'production' ? 10 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts. Please wait 15 minutes before retrying.' },

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { InvoiceStatus, PaymentMethod, PaymentStatus, TransactionType } from '@prisma/client';
-import { validateBody, createInvoiceSchema, manualPaymentSchema } from '../middleware/validate.middleware';
+import { validateBody, createInvoiceSchema, updateInvoiceSchema, manualPaymentSchema } from '../middleware/validate.middleware';
 
 const router = Router();
 
@@ -86,7 +86,7 @@ router.post(
           invoiceNumber,
           issueDate: new Date(),
           dueDate: new Date(dueDate),
-          status: status || InvoiceStatus.PENDING,
+          status: status === InvoiceStatus.DRAFT ? InvoiceStatus.DRAFT : InvoiceStatus.PENDING,
           subtotal,
           taxRate: taxPercentage,
           taxAmount,
@@ -147,38 +147,49 @@ router.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
   }
 });
 
-// Update invoice status or fields
-router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { status, dueDate, notes } = req.body;
+// Update invoice status or fields (Guarded against unauthorized status manipulation)
+router.put(
+  '/:id',
+  requireAuth,
+  validateBody(updateInvoiceSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { status, dueDate, notes } = req.body;
 
-    const existing = await prisma.invoice.findFirst({
-      where: { id: req.params.id, userId: req.userId },
-    });
+      const existing = await prisma.invoice.findFirst({
+        where: { id: req.params.id, userId: req.userId },
+      });
 
-    if (!existing) {
-      res.status(404).json({ error: 'Invoice not found or unauthorized.' });
-      return;
+      if (!existing) {
+        res.status(404).json({ error: 'Invoice not found or unauthorized.' });
+        return;
+      }
+
+      // Settled invoices cannot have their status reversed or altered
+      if (existing.status === InvoiceStatus.PAID && status && status !== InvoiceStatus.PAID) {
+        res.status(400).json({ error: 'Settled invoices cannot have their status altered.' });
+        return;
+      }
+
+      const updated = await prisma.invoice.update({
+        where: { id: existing.id },
+        data: {
+          ...(status && { status }),
+          ...(dueDate && { dueDate: new Date(dueDate) }),
+          ...(notes !== undefined && { notes: notes ? String(notes).trim() : null }),
+        },
+        include: {
+          client: true,
+          items: true,
+        },
+      });
+
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update invoice.' });
     }
-
-    const updated = await prisma.invoice.update({
-      where: { id: existing.id },
-      data: {
-        ...(status && { status }),
-        ...(dueDate && { dueDate: new Date(dueDate) }),
-        ...(notes !== undefined && { notes: notes ? String(notes).trim() : null }),
-      },
-      include: {
-        client: true,
-        items: true,
-      },
-    });
-
-    res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update invoice.' });
   }
-});
+);
 
 // Record manual payment with strict balance limits and idempotency
 router.post(

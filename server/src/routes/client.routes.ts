@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import prisma from '../prisma';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.middleware';
-import { validateBody, createClientSchema } from '../middleware/validate.middleware';
+import { validateBody, createClientSchema, updateClientSchema } from '../middleware/validate.middleware';
 
 const router = Router();
 
@@ -102,7 +102,11 @@ router.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
 });
 
 // Update client (Enforces ownership & prevents IDOR)
-router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.put(
+  '/:id',
+  requireAuth,
+  validateBody(updateClientSchema),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { name, email, phone, company, projectDetails, contractAmount, startDate, deadline, projectStatus, paymentStatus } = req.body;
 
