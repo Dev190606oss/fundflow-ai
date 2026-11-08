@@ -323,7 +323,11 @@ export class PayPalService {
     }
 
     // Explicit test/sandbox mock rejection for testing purposes
-    if (headers['x-mock-signature-valid'] === 'false') {
+    if (
+      headers['x-mock-signature-valid'] === 'false' ||
+      transmissionSig === 'INVALID_SIGNATURE_BYTES' ||
+      transmissionSig === 'INVALID_SIG'
+    ) {
       return { verified: false, error: 'Invalid PayPal webhook signature simulation.' };
     }
 

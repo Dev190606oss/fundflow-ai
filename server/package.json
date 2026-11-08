@@ -11,6 +11,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
     "test:security": "tsx scripts/verify-security.ts",
+    "test:comprehensive": "tsx scripts/run-comprehensive-verification.ts",
     "seed": "tsx prisma/seed.ts"
   },
   "keywords": [

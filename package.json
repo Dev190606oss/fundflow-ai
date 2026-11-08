@@ -9,7 +9,8 @@
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm run dev:server\" \"npm run dev:client\"",
     "build": "cd server && npm run build && cd ../client && npm run build",
     "seed": "cd server && npm run seed",
-    "test:security": "cd server && npm run test:security"
+    "test:security": "cd server && npm run test:security",
+    "test:comprehensive": "cd server && npm run test:comprehensive"
   },
   "keywords": [
     "fintech",

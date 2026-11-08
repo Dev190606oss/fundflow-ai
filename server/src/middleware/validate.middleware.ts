@@ -129,20 +129,20 @@ export const createContributionSchema = z.object({
 
 // 6. AI Schemas
 export const aiBriefSchema = z.object({
-  prompt: z.string().min(3, 'Prompt too short').max(2000, 'Prompt exceeds 2000 characters'),
-  clientName: z.string().max(100).optional(),
+  prompt: z.string().trim().min(3, 'Prompt too short').max(2000, 'Prompt exceeds 2000 characters'),
+  clientName: z.string().trim().max(100).optional(),
 });
 
 export const aiReminderSchema = z.object({
-  partyName: z.string().min(2).max(100),
+  partyName: z.string().trim().min(2).max(100),
   amount: z.coerce.number().positive(),
   dueDate: z.string().max(50).optional(),
   type: z.enum(['LENT', 'INVOICE']).default('INVOICE'),
-  context: z.string().max(500).optional(),
+  context: z.string().trim().max(500).optional(),
 });
 
 export const aiChatSchema = z.object({
-  message: z.string().min(1, 'Message cannot be empty').max(2000, 'Message exceeds 2000 characters'),
+  message: z.string().trim().min(1, 'Message cannot be empty').max(2000, 'Message exceeds 2000 characters'),
   history: z.array(z.object({
     role: z.string(),
     content: z.string().max(3000),
