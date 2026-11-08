@@ -109,7 +109,9 @@ router.post('/webhook', async (req, res): Promise<void> => {
       return;
     }
 
-    const result = await PayPalService.processWebhookEvent(req.body);
+    const result = await PayPalService.processWebhookEvent(req.body, {
+      simulateCrashDuringSettlement: req.headers['x-mock-crash-during-settlement'] === 'true',
+    });
     res.status(200).json(result);
   } catch (error: any) {
     console.error('PayPal webhook processing error:', error);

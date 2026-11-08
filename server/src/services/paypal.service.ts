@@ -405,7 +405,10 @@ export class PayPalService {
   /**
    * Process Verified Webhook Event with Database Persistence & Race-Condition Protection
    */
-  public static async processWebhookEvent(event: any): Promise<{
+  public static async processWebhookEvent(
+    event: any,
+    options?: { simulateCrashDuringSettlement?: boolean }
+  ): Promise<{
     processed: boolean;
     status: string;
     details?: string;
@@ -435,10 +438,11 @@ export class PayPalService {
       }
 
       // Safe Recovery Check:
-      // Allow retry if previous attempt failed or was interrupted by a server crash/kill (> 60s ago)
+      // Allow retry if previous attempt failed or was interrupted by a server crash/kill (> timeout)
+      const stuckTimeout = Number(process.env.PAYPAL_WEBHOOK_STUCK_TIMEOUT_MS) || 60000;
       const isStuckProcessing =
         (existingDbEvent.status === 'PROCESSING' || existingDbEvent.status === 'PROCESSING_RETRY') &&
-        Date.now() - existingDbEvent.createdAt.getTime() > 60000;
+        Date.now() - existingDbEvent.createdAt.getTime() > stuckTimeout;
       const isFailed = existingDbEvent.status === 'FAILED';
 
       if (!isStuckProcessing && !isFailed) {
@@ -450,10 +454,26 @@ export class PayPalService {
       }
 
       console.warn(`🔄 Recovering webhook event ${eventId} from prior ${existingDbEvent.status} state.`);
-      await prisma.processedWebhookEvent.update({
-        where: { id: eventId },
-        data: { status: 'PROCESSING_RETRY' },
+
+      // ATOMIC CONDITIONAL CLAIM (Compare-And-Swap / Optimistic Concurrency)
+      // Only the instance that atomically updates status matching existingDbEvent.status wins!
+      const claimResult = await prisma.processedWebhookEvent.updateMany({
+        where: {
+          id: eventId,
+          status: existingDbEvent.status, // atomic CAS condition
+        },
+        data: {
+          status: 'PROCESSING_RETRY',
+        },
       });
+
+      if (claimResult.count === 0) {
+        return {
+          processed: false,
+          status: 'DUPLICATE_IGNORED',
+          details: `Webhook event ${eventId} recovery was claimed concurrently by another instance.`,
+        };
+      }
     } else {
       // 2. Concurrency Lock: Atomically claim event ID in database via unique primary key constraint
       try {
@@ -545,7 +565,7 @@ export class PayPalService {
       }
 
       // Currency Verification
-      // Standardize: if invoice in INR, sandbox captures in USD
+      // Standardize: if invoice in INR, sandbox captures in USD, or native INR if supported
       const expectedCurrency = 'USD';
       if (currencyCode !== expectedCurrency && currencyCode !== 'INR') {
         await prisma.processedWebhookEvent.update({
@@ -564,12 +584,22 @@ export class PayPalService {
       const expectedAmountInUSD = Math.round((balanceDue / this.exchangeRateINRtoUSD) * 100) / 100;
       const expectedAmountInINR = balanceDue;
 
-      const paidSufficiently =
-        currencyCode === 'USD'
-          ? amountValue >= expectedAmountInUSD - 0.05 // 5 cents rounding tolerance
-          : amountValue >= expectedAmountInINR - 1.0; // 1 rupee rounding tolerance
+      let paidSufficiently = false;
+      let creditedINR = 0;
+
+      if (currencyCode === 'INR') {
+        // Native INR capture: must match or exceed the exact balance due in INR
+        paidSufficiently = amountValue >= expectedAmountInINR;
+        creditedINR = Math.min(balanceDue, Math.round(amountValue * 100) / 100);
+      } else if (currencyCode === 'USD') {
+        // Converted USD capture: must match or exceed exact rounded USD balance (zero tolerance for underpayment)
+        paidSufficiently = amountValue >= expectedAmountInUSD;
+        // Exact converted INR credited (rounded to nearest whole rupee to resolve forex cent rounding artifacts)
+        creditedINR = Math.min(balanceDue, Math.round(amountValue * this.exchangeRateINRtoUSD));
+      }
 
       if (!paidSufficiently) {
+        const expectedStr = currencyCode === 'INR' ? `₹${expectedAmountInINR} INR` : `$${expectedAmountInUSD} USD`;
         await prisma.processedWebhookEvent.update({
           where: { id: eventId },
           data: { status: 'UNDERPAYMENT_REJECTED' },
@@ -577,24 +607,88 @@ export class PayPalService {
         return {
           processed: false,
           status: 'UNDERPAYMENT_REJECTED',
-          details: `Captured amount ${amountValue} ${currencyCode} is insufficient for balance due (Expected ~${expectedAmountInUSD} USD / ₹${expectedAmountInINR}).`,
+          details: `Captured amount ${amountValue} ${currencyCode} is insufficient for balance due (Expected ${expectedStr}).`,
         };
       }
 
-      // Atomic settlement: invoice update, client update, and webhook SETTLED status inside ONE transaction
+      const captureId = resource?.id || eventId;
+      const orderId = resource?.supplementary_data?.related_ids?.order_id || 'WEBHOOK-SETTLEMENT';
+      const updatedPaidAmount = invoice.paidAmount + creditedINR;
+      const isFullyPaid = updatedPaidAmount >= invoice.totalAmount;
+
+      // Atomic settlement: invoice update, client update, payment record, and webhook SETTLED status inside ONE transaction
       try {
         await prisma.$transaction(async (tx) => {
+          // 1. Record Payment
+          const payment = await tx.payment.create({
+            data: {
+              invoiceId: invoice.id,
+              userId: invoice.userId,
+              amount: creditedINR,
+              paymentMethod: PaymentMethod.PAYPAL,
+              transactionId: captureId,
+              status: PaymentStatus.COMPLETED,
+              paidAt: new Date(),
+            },
+          });
+
+          // 2. Record or update PayPal transaction details
+          const uniqueOrderId = orderId && orderId !== 'WEBHOOK-SETTLEMENT' ? orderId : `ORD-${eventId}`;
+          const uniqueCaptureId = captureId && captureId !== eventId ? captureId : `CAP-${eventId}`;
+
+          const existingTx = await tx.payPalTransaction.findUnique({
+            where: { orderId: uniqueOrderId },
+          });
+
+          if (existingTx) {
+            await tx.payPalTransaction.update({
+              where: { id: existingTx.id },
+              data: {
+                paymentId: payment.id,
+                captureId: uniqueCaptureId,
+                status: 'COMPLETED',
+                rawResponse: JSON.stringify(event),
+              },
+            });
+          } else {
+            await tx.payPalTransaction.create({
+              data: {
+                userId: invoice.userId,
+                paymentId: payment.id,
+                orderId: uniqueOrderId,
+                captureId: uniqueCaptureId,
+                amount: amountValue,
+                currency: currencyCode,
+                status: 'COMPLETED',
+                rawResponse: JSON.stringify(event),
+              },
+            });
+          }
+
+          // 3. Update Invoice
           await tx.invoice.update({
             where: { id: invoice.id },
             data: {
-              status: InvoiceStatus.PAID,
-              paidAmount: invoice.totalAmount,
+              status: isFullyPaid ? InvoiceStatus.PAID : invoice.status,
+              paidAmount: updatedPaidAmount,
             },
           });
-          await tx.client.update({
-            where: { id: invoice.clientId },
-            data: { paymentStatus: 'Paid' },
-          });
+
+          // 4. Update Client status
+          if (isFullyPaid) {
+            await tx.client.update({
+              where: { id: invoice.clientId },
+              data: { paymentStatus: 'Paid' },
+            });
+          }
+
+          // Simulation hook: force crash during transaction right before commit
+          if (options?.simulateCrashDuringSettlement) {
+            console.error('💥 [CRASH SIMULATION] Forcefully killing process mid-transaction via SIGKILL...');
+            process.kill(process.pid, 'SIGKILL');
+          }
+
+          // 5. Update Webhook Event status
           await tx.processedWebhookEvent.update({
             where: { id: eventId },
             data: { status: 'SETTLED' },
