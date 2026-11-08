@@ -16,10 +16,13 @@ export interface PayPalCaptureResponse {
     name?: { given_name?: string; surname?: string };
   };
   purchase_units?: Array<{
+    reference_id?: string;
+    custom_id?: string;
     payments?: {
       captures?: Array<{
         id: string;
         status: string;
+        custom_id?: string;
         amount: { value: string; currency_code: string };
       }>;
     };
@@ -178,8 +181,10 @@ export class PayPalService {
     let captureId = `CAPTURE-SANDBOX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
     let payerEmail = `${invoice.client.email}`;
     let payerId = `PAYER-SB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    let captureStatus = 'COMPLETED';
+    let captureStatus = 'FAILED';
     let rawResponse = JSON.stringify({ simulated: true, orderId, time: new Date().toISOString() });
+
+    const balanceRemaining = Math.round((invoice.totalAmount - invoice.paidAmount) * 100) / 100;
 
     if (this.isConfigured()) {
       try {
@@ -192,25 +197,54 @@ export class PayPalService {
           },
         });
 
-        if (response.ok) {
-          const data = (await response.json()) as PayPalCaptureResponse;
-          rawResponse = JSON.stringify(data);
-          captureStatus = data.status;
-
-          const captureUnit = data.purchase_units?.[0]?.payments?.captures?.[0];
-          if (captureUnit) {
-            captureId = captureUnit.id;
-          }
-          if (data.payer?.email_address) {
-            payerEmail = data.payer.email_address;
-          }
-          if (data.payer?.payer_id) {
-            payerId = data.payer.payer_id;
-          }
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`PayPal capture request rejected with status ${response.status}: ${errText}`);
         }
-      } catch (err) {
-        console.warn('Real capture failed, logging error:', err);
+
+        const data = (await response.json()) as PayPalCaptureResponse;
+        rawResponse = JSON.stringify(data);
+        captureStatus = data.status;
+
+        const unit = data.purchase_units?.[0];
+        const captureUnit = unit?.payments?.captures?.[0];
+        if (!captureUnit || captureUnit.status !== 'COMPLETED') {
+          throw new Error(`PayPal payment capture incomplete or missing. Status: ${captureUnit?.status || data.status}`);
+        }
+
+        // Verify order belongs to the intended invoice
+        const returnedInvoiceId = captureUnit.custom_id || unit?.custom_id || unit?.reference_id;
+        if (returnedInvoiceId && returnedInvoiceId !== invoice.id) {
+          throw new Error(`PayPal order mismatch: expected invoice ${invoice.id}, received ${returnedInvoiceId}`);
+        }
+
+        // Verify captured amount and currency
+        const capturedAmount = parseFloat(captureUnit.amount?.value || '0');
+        const expectedUsd = balanceRemaining / 85;
+        const capturedCurrency = captureUnit.amount?.currency_code;
+
+        const isUsdMatch = capturedCurrency === 'USD' && capturedAmount >= Math.round(expectedUsd * 100) / 100;
+        const isDirectMatch = (capturedCurrency === 'INR' || capturedCurrency === invoice.client?.paymentStatus) && capturedAmount >= balanceRemaining;
+
+        if (!isUsdMatch && !isDirectMatch) {
+          throw new Error(`Captured amount (${capturedAmount} ${capturedCurrency}) does not cover balance due (${balanceRemaining})`);
+        }
+
+        captureId = captureUnit.id;
+        if (data.payer?.email_address) payerEmail = data.payer.email_address;
+        if (data.payer?.payer_id) payerId = data.payer.payer_id;
+      } catch (err: any) {
+        throw new Error(`PayPal verification failed: ${err.message}`);
       }
+    } else {
+      // High-fidelity Sandbox Simulator for local development
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('PayPal payment gateway is not configured for production transactions.');
+      }
+      if (!orderId.startsWith('ORDER-SANDBOX-')) {
+        throw new Error('Invalid PayPal Sandbox order token format.');
+      }
+      captureStatus = 'COMPLETED';
     }
 
     // Strictly verify status before marking as completed
@@ -225,7 +259,7 @@ export class PayPalService {
         data: {
           invoiceId: invoice.id,
           userId,
-          amount: invoice.totalAmount,
+          amount: balanceRemaining,
           paymentMethod: PaymentMethod.PAYPAL,
           transactionId: captureId,
           status: PaymentStatus.COMPLETED,
@@ -242,7 +276,7 @@ export class PayPalService {
           captureId,
           payerEmail,
           payerId,
-          amount: invoice.totalAmount,
+          amount: balanceRemaining,
           currency: 'INR',
           status: 'COMPLETED',
           rawResponse,
@@ -272,7 +306,7 @@ export class PayPalService {
           type: TransactionType.INCOME,
           category: 'Freelance Payout',
           description: `PayPal settlement for Invoice ${invoice.invoiceNumber} (${invoice.client.name})`,
-          amount: invoice.totalAmount,
+          amount: balanceRemaining,
           referenceId: invoice.id,
         },
       });

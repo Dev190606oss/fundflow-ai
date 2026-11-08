@@ -165,6 +165,18 @@ router.put(
         return;
       }
 
+      // Invoices that have received any payment cannot be cancelled
+      if (status === InvoiceStatus.CANCELLED && existing.paidAmount > 0) {
+        res.status(400).json({ error: 'Invoices with recorded payments cannot be cancelled.' });
+        return;
+      }
+
+      // Partially paid invoices cannot have their payment-derived status altered
+      if (existing.status === InvoiceStatus.PARTIALLY_PAID && status && status !== InvoiceStatus.PARTIALLY_PAID) {
+        res.status(400).json({ error: 'Partially paid invoices cannot have their payment status altered.' });
+        return;
+      }
+
       // Settled invoices cannot have their status reversed or altered
       if (existing.status === InvoiceStatus.PAID && status && status !== InvoiceStatus.PAID) {
         res.status(400).json({ error: 'Settled invoices cannot have their status altered.' });

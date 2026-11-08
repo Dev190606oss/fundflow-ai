@@ -50,12 +50,12 @@ export const createClientSchema = z.object({
   phone: z.string().max(30).optional().nullable(),
   company: z.string().max(100).optional().nullable(),
   projectDetails: z.string().max(1000).optional().nullable(),
-  contractAmount: z.coerce.number().min(0, 'Contract amount cannot be negative').default(0),
+  contractAmount: z.coerce.number().min(0, 'Contract amount cannot be negative').max(1000000000, 'Contract amount exceeds upper limit').default(0),
   startDate: z.string().optional().nullable(),
   deadline: z.string().optional().nullable(),
   projectStatus: z.string().max(50).optional(),
   paymentStatus: z.string().max(50).optional(),
-});
+}).strict();
 
 export const updateClientSchema = z.object({
   name: z.string().min(2, 'Client name is required').max(100).optional(),
@@ -63,19 +63,19 @@ export const updateClientSchema = z.object({
   phone: z.string().max(30).optional().nullable(),
   company: z.string().max(100).optional().nullable(),
   projectDetails: z.string().max(1000).optional().nullable(),
-  contractAmount: z.coerce.number().min(0, 'Contract amount cannot be negative').optional(),
+  contractAmount: z.coerce.number().min(0, 'Contract amount cannot be negative').max(1000000000, 'Contract amount exceeds upper limit').optional(),
   startDate: z.string().optional().nullable(),
   deadline: z.string().optional().nullable(),
   projectStatus: z.string().max(50).optional(),
   paymentStatus: z.string().max(50).optional(),
-});
+}).strict();
 
 // 3. Invoice Schemas
 export const invoiceItemSchema = z.object({
   description: z.string().min(1, 'Item description is required').max(255),
   quantity: z.coerce.number().positive('Quantity must be greater than zero'),
   unitPrice: z.coerce.number().min(0, 'Unit price cannot be negative'),
-});
+}).strict();
 
 export const createInvoiceSchema = z.object({
   clientId: z.string().uuid('Invalid client ID format'),
@@ -85,13 +85,13 @@ export const createInvoiceSchema = z.object({
   discountAmount: z.coerce.number().min(0).default(0),
   notes: z.string().max(1000).optional().nullable(),
   status: z.enum(['DRAFT', 'PENDING']).optional(),
-});
+}).strict();
 
 export const updateInvoiceSchema = z.object({
   dueDate: z.string().optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   status: z.enum(['DRAFT', 'PENDING', 'CANCELLED']).optional(),
-});
+}).strict();
 
 export const manualPaymentSchema = z.object({
   amount: z.coerce.number().positive('Payment amount must be greater than zero'),

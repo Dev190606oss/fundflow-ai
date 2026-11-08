@@ -263,7 +263,7 @@ async function runAssessment() {
       `HTTP ${putPartialAttempt.status} (Schema rejected restricted payment status)`
     );
 
-    // 4.4 Allowed status update ("CANCELLED") works
+    // 4.4 Allowed status update ("CANCELLED") works for unpaid invoice
     const putCancelAttempt = await api(`/invoices/${invoiceAId}`, {
       method: 'PUT',
       headers: authHeadersA,
@@ -274,9 +274,132 @@ async function runAssessment() {
     record(
       'OWASP CheatSheet',
       'Financial Integrity',
-      'Allow legitimate operational status update ("CANCELLED")',
+      'Allow legitimate operational status update ("CANCELLED") on zero-payment invoice',
       putCancelAttempt.status === 200 && putCancelAttempt.body?.status === 'CANCELLED',
       `HTTP ${putCancelAttempt.status}, Status updated to CANCELLED`
+    );
+
+    // 4.5 Invoices with payments CANNOT be cancelled (Protects against hiding outstanding balance)
+    const paidInvRes = await api('/invoices', {
+      method: 'POST',
+      headers: authHeadersA,
+      body: JSON.stringify({
+        clientId: clientAId,
+        dueDate: new Date(Date.now() + 86400000).toISOString(),
+        items: [{ description: 'Project Retainer', quantity: 1, unitPrice: 2000 }],
+        taxRate: 0,
+        discountAmount: 0,
+      }),
+    });
+    const paidInvId = paidInvRes.body?.id;
+
+    // Record partial payment of $500
+    await api(`/invoices/${paidInvId}/manual-payment`, {
+      method: 'POST',
+      headers: authHeadersA,
+      body: JSON.stringify({
+        amount: 500,
+        paymentMethod: 'BANK_TRANSFER',
+        reference: 'Initial partial payment',
+      }),
+    });
+
+    // Attempt to cancel partially paid invoice
+    const cancelPaidAttempt = await api(`/invoices/${paidInvId}`, {
+      method: 'PUT',
+      headers: authHeadersA,
+      body: JSON.stringify({ status: 'CANCELLED' }),
+    });
+    record(
+      'OWASP CheatSheet',
+      'Financial Integrity',
+      'Reject cancellation of invoice with recorded payments',
+      cancelPaidAttempt.status === 400,
+      `HTTP ${cancelPaidAttempt.status} (Invoices with payments protected against cancellation)`
+    );
+
+    // 4.6 Partially paid invoices cannot have status altered to DRAFT/PENDING
+    const alterPartialAttempt = await api(`/invoices/${paidInvId}`, {
+      method: 'PUT',
+      headers: authHeadersA,
+      body: JSON.stringify({ status: 'PENDING' }),
+    });
+    record(
+      'OWASP CheatSheet',
+      'Financial Integrity',
+      'Reject manual status alteration on partially paid invoice',
+      alterPartialAttempt.status === 400,
+      `HTTP ${alterPartialAttempt.status} (Payment-derived status protected)`
+    );
+
+    // 4.7 Reject unknown or protected fields via .strict() schema in invoice update
+    const unknownInvoiceFieldAttempt = await api(`/invoices/${paidInvId}`, {
+      method: 'PUT',
+      headers: authHeadersA,
+      body: JSON.stringify({ paidAmount: 0, notes: 'Attempting field injection' }),
+    });
+    record(
+      'OWASP CheatSheet',
+      'Input Validation',
+      'Reject unknown or protected fields via .strict() schema in invoice update',
+      unknownInvoiceFieldAttempt.status === 400,
+      `HTTP ${unknownInvoiceFieldAttempt.status} (Schema strictly rejects unwhitelisted fields)`
+    );
+
+    // 4.8 Reject unknown or protected fields via .strict() schema in client update
+    const unknownClientFieldAttempt = await api(`/clients/${clientAId}`, {
+      method: 'PUT',
+      headers: authHeadersA,
+      body: JSON.stringify({ evilField: 'malicious_injection', name: 'Valid Name' }),
+    });
+    record(
+      'OWASP CheatSheet',
+      'Input Validation',
+      'Reject unknown fields via .strict() schema in client update',
+      unknownClientFieldAttempt.status === 400,
+      `HTTP ${unknownClientFieldAttempt.status} (Schema strictly rejects unwhitelisted fields)`
+    );
+
+    // 4.9 Reject negative contract amounts in client update
+    const negContractAttempt = await api(`/clients/${clientAId}`, {
+      method: 'PUT',
+      headers: authHeadersA,
+      body: JSON.stringify({ contractAmount: -500 }),
+    });
+    record(
+      'OWASP CheatSheet',
+      'Input Validation',
+      'Reject negative contract amount in client update',
+      negContractAttempt.status === 400,
+      `HTTP ${negContractAttempt.status} (Negative numbers rejected by schema)`
+    );
+
+    // 4.10 Reject unreasonable contract amounts exceeding upper limit (1 billion)
+    const excessiveContractAttempt = await api(`/clients/${clientAId}`, {
+      method: 'PUT',
+      headers: authHeadersA,
+      body: JSON.stringify({ contractAmount: 999999999999 }),
+    });
+    record(
+      'OWASP CheatSheet',
+      'Input Validation',
+      'Reject excessive contract amount exceeding upper limit',
+      excessiveContractAttempt.status === 400,
+      `HTTP ${excessiveContractAttempt.status} (Exceeded maximum ceiling)`
+    );
+
+    // 4.11 PayPal Sandbox capture rejects arbitrary non-sandbox token in dev simulation
+    const invalidCaptureTokenAttempt = await api('/paypal/capture-order', {
+      method: 'POST',
+      headers: authHeadersA,
+      body: JSON.stringify({ invoiceId: paidInvId, orderId: 'NON_SANDBOX_ARBITRARY_TOKEN' }),
+    });
+    record(
+      'PayloadsAllTheThings',
+      'PayPal Security',
+      'PayPal capture rejects unverified non-sandbox order token',
+      invalidCaptureTokenAttempt.status === 500 || invalidCaptureTokenAttempt.status === 400,
+      `HTTP ${invalidCaptureTokenAttempt.status} (Unverified token rejected by capture engine)`
     );
 
     // -----------------------------------------------------------------
@@ -486,6 +609,9 @@ async function runAssessment() {
     // -----------------------------------------------------------------
     // TEARDOWN EPHEMERAL TEST ENTITIES
     // -----------------------------------------------------------------
+    await prisma.payPalTransaction.deleteMany({ where: { userId: userAId } });
+    await prisma.payment.deleteMany({ where: { userId: userAId } });
+    await prisma.transaction.deleteMany({ where: { userId: userAId } });
     await prisma.invoiceItem.deleteMany({ where: { invoice: { userId: userAId } } });
     await prisma.invoice.deleteMany({ where: { userId: userAId } });
     await prisma.client.deleteMany({ where: { userId: userAId } });
