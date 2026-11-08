@@ -12,9 +12,11 @@ import { loanApi, aiApi } from '../services/api';
 import { Loan, LoanType } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export const BorrowLendPage: React.FC = () => {
   const { currency } = useAuth();
+  const { toast, confirmModal } = useToast();
   const [loans, setLoans] = useState<Loan[]>([]);
   const [summary, setSummary] = useState<any>({});
   const [loading, setLoading] = useState(true);
@@ -70,9 +72,13 @@ export const BorrowLendPage: React.FC = () => {
     fetchLoans();
   }, []);
 
+  const [submittingLoan, setSubmittingLoan] = useState(false);
+  const [submittingRepay, setSubmittingRepay] = useState(false);
+
   const handleCreateLoan = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setSubmittingLoan(true);
       await loanApi.create({
         type: modalType,
         partyName,
@@ -84,8 +90,11 @@ export const BorrowLendPage: React.FC = () => {
       setShowAddModal(false);
       resetForm();
       fetchLoans();
+      toast.success(modalType === 'LENT' ? 'Money lent record saved successfully.' : 'Borrowed money record saved successfully.');
     } catch (err: any) {
-      alert(err.message || 'Failed to save loan');
+      toast.error(err.message || 'Failed to save loan');
+    } finally {
+      setSubmittingLoan(false);
     }
   };
 
@@ -93,6 +102,7 @@ export const BorrowLendPage: React.FC = () => {
     e.preventDefault();
     if (!selectedLoanForRepay) return;
     try {
+      setSubmittingRepay(true);
       await loanApi.addRepayment(selectedLoanForRepay.id, {
         amount: Number(repayAmount),
         notes: repayNotes,
@@ -101,16 +111,26 @@ export const BorrowLendPage: React.FC = () => {
       setRepayAmount('');
       setRepayNotes('');
       fetchLoans();
+      toast.success('Repayment recorded successfully.');
     } catch (err: any) {
-      alert(err.message || 'Failed to record repayment');
+      toast.error(err.message || 'Failed to record repayment');
+    } finally {
+      setSubmittingRepay(false);
     }
   };
 
-  const handleDeleteLoan = async (id: string) => {
-    if (confirm('Delete this record?')) {
-      await loanApi.delete(id);
-      fetchLoans();
-    }
+  const handleDeleteLoan = (loan: Loan) => {
+    confirmModal({
+      title: 'Delete Loan Record',
+      message: `Are you sure you want to delete this ${loan.type === 'LENT' ? 'lent' : 'borrowed'} record for ${loan.partyName}? This action cannot be undone.`,
+      confirmText: 'Delete Record',
+      isDestructive: true,
+      onConfirm: async () => {
+        await loanApi.delete(loan.id);
+        toast.success('Loan record deleted successfully.');
+        fetchLoans();
+      },
+    });
   };
 
   const handleGeneratePoliteReminder = async (loan: Loan) => {
@@ -359,7 +379,7 @@ export const BorrowLendPage: React.FC = () => {
                   </div>
 
                   <button
-                    onClick={() => handleDeleteLoan(loan.id)}
+                    onClick={() => handleDeleteLoan(loan)}
                     className="p-1.5 text-[#737373] hover:text-rose-600 rounded"
                     title="Delete record"
                   >
@@ -461,9 +481,10 @@ export const BorrowLendPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="btn-primary"
+                  disabled={submittingLoan}
+                  className="btn-primary disabled:opacity-50"
                 >
-                  Save Record
+                  {submittingLoan ? 'Saving...' : 'Save Record'}
                 </button>
               </div>
             </form>
@@ -522,9 +543,10 @@ export const BorrowLendPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="btn-primary"
+                  disabled={submittingRepay}
+                  className="btn-primary disabled:opacity-50"
                 >
-                  Confirm Repayment
+                  {submittingRepay ? 'Recording...' : 'Confirm Repayment'}
                 </button>
               </div>
             </form>

@@ -2,25 +2,32 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ShieldCheck, Sparkles, CheckCircle2 } from 'lucide-react';
 import { authApi } from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 export const SettingsPage: React.FC = () => {
   const { user, currency, setCurrency } = useAuth();
+  const { toast } = useToast();
   const [businessName, setBusinessName] = useState(user?.businessName || '');
   const [userName, setUserName] = useState(user?.name || '');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setSaving(true);
       await authApi.updateProfile({
         name: userName,
         businessName,
         currency,
       });
       setSaved(true);
+      toast.success('Profile settings saved successfully.');
       setTimeout(() => setSaved(false), 2500);
     } catch {
-      alert('Failed to update profile');
+      toast.error('Failed to update profile');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -83,10 +90,11 @@ export const SettingsPage: React.FC = () => {
 
           <button
             type="submit"
-            className="btn-primary flex items-center gap-1.5"
+            disabled={saving}
+            className="btn-primary flex items-center gap-1.5 disabled:opacity-50"
           >
             {saved ? <CheckCircle2 size={13} className="text-emerald-300" /> : null}
-            <span>{saved ? 'Settings Saved' : 'Save Changes'}</span>
+            <span>{saving ? 'Saving...' : saved ? 'Settings Saved' : 'Save Changes'}</span>
           </button>
         </form>
       </div>

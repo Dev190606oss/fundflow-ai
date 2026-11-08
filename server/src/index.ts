@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import prisma from './prisma';
 
 import authRoutes from './routes/auth.routes';
 import dashboardRoutes from './routes/dashboard.routes';
@@ -128,14 +129,37 @@ app.use('/api/ai/', aiLimiter);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Health Check Endpoint
-app.get('/api/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'online',
+// Health Check Endpoint (Live Database Ping & Service Readiness)
+app.get('/api/health', async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  let dbStatus = 'disconnected';
+  let dbLatency = -1;
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbStatus = 'connected';
+    dbLatency = Date.now() - startTime;
+  } catch (err) {
+    dbStatus = 'error';
+  }
+
+  const isHealthy = dbStatus === 'connected';
+
+  res.status(isHealthy ? 200 : 503).json({
+    status: isHealthy ? 'healthy' : 'unhealthy',
     app: 'FundFlow AI API',
     version: '1.0.0',
     hackathon: 'PayPal AI Hackathon 2026',
     timestamp: new Date().toISOString(),
+    uptime: Math.floor(process.uptime()),
+    database: {
+      status: dbStatus,
+      latencyMs: dbLatency,
+    },
+    services: {
+      paypalSandbox: Boolean(process.env.PAYPAL_CLIENT_ID),
+      geminiAI: Boolean(process.env.GEMINI_API_KEY),
+    },
     security: {
       headers: 'helmet-active',
       rateLimiting: 'active',
@@ -192,5 +216,29 @@ const server = app.listen(PORT, () => {
   console.log(`💳 PayPal Integration: Sandbox Mode Active`);
   console.log(`🤖 AI Engine: Active`);
 });
+
+// Graceful Shutdown Handler for Containers & Deployments
+const gracefulShutdown = async (signal: string) => {
+  console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+  server.close(async () => {
+    console.log('🔒 HTTP server closed.');
+    try {
+      await prisma.$disconnect();
+      console.log('📦 Database connections cleanly closed.');
+      process.exit(0);
+    } catch (err) {
+      console.error('Error during database disconnect:', err);
+      process.exit(1);
+    }
+  });
+
+  setTimeout(() => {
+    console.error('⚠️ Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000).unref();
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;

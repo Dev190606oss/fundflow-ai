@@ -51,10 +51,15 @@ router.post(
         return;
       }
 
-      // Auto-generate invoice number
-      const count = await prisma.invoice.count({ where: { userId: req.userId } });
+      // Auto-generate unique invoice number without collisions across tenants
+      const count = await prisma.invoice.count();
       const year = new Date().getFullYear();
-      const invoiceNumber = `INV-${year}-${String(count + 1).padStart(3, '0')}`;
+      let invoiceNumber = `INV-${year}-${String(count + 1).padStart(4, '0')}`;
+      let attempts = 0;
+      while (await prisma.invoice.findUnique({ where: { invoiceNumber } })) {
+        attempts++;
+        invoiceNumber = `INV-${year}-${String(count + 1 + attempts).padStart(4, '0')}`;
+      }
 
       // Calculate totals securely
       const calculatedItems = items.map((item: any) => {

@@ -12,6 +12,7 @@
     "prisma:push": "prisma db push",
     "test:security": "tsx scripts/verify-security.ts",
     "test:comprehensive": "tsx scripts/run-comprehensive-verification.ts",
+    "test:e2e": "tsx scripts/run-e2e-workflows.ts",
     "seed": "tsx prisma/seed.ts"
   },
   "keywords": [

@@ -34,6 +34,8 @@ interface SidebarProps {
   setActiveTab: (tab: ActiveTab) => void;
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
+  mobileOpen?: boolean;
+  setMobileOpen?: (open: boolean) => void;
   unreadCount?: number;
 }
 
@@ -42,6 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   collapsed,
   setCollapsed,
+  mobileOpen = false,
+  setMobileOpen,
   unreadCount = 0,
 }) => {
   const { user, logout } = useAuth();
@@ -59,12 +63,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
+  const handleSelectTab = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    if (setMobileOpen) {
+      setMobileOpen(false);
+    }
+  };
+
   return (
-    <aside
-      className={`fixed top-0 left-0 z-40 h-screen transition-all duration-200 ease-in-out bg-[#171717] border-r border-[#262626] flex flex-col justify-between ${
-        collapsed ? 'w-16' : 'w-60'
-      }`}
-    >
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 md:hidden backdrop-blur-sm transition-opacity"
+          onClick={() => setMobileOpen && setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`fixed top-0 left-0 z-40 h-screen transition-transform md:transition-all duration-200 ease-in-out bg-[#171717] border-r border-[#262626] flex flex-col justify-between ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        } ${collapsed ? 'w-16' : 'w-60'}`}
+      >
       {/* Top Header / Branding */}
       <div>
         <div className="h-14 flex items-center justify-between px-3.5 border-b border-[#262626]">
@@ -111,7 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id as ActiveTab)}
+                onClick={() => handleSelectTab(item.id as ActiveTab)}
                 className={`w-full flex items-center rounded-md px-2.5 py-2 text-xs font-medium transition-colors ${
                   isActive
                     ? 'bg-[#262626] text-white font-semibold'
@@ -185,5 +206,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
     </aside>
+    </>
   );
 };

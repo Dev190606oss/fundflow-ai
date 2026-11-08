@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Bell, Calendar, ChevronDown, Check, Bot } from 'lucide-react';
+import { Search, Bell, Calendar, ChevronDown, Check, Bot, Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Notification } from '../types';
 
@@ -7,6 +7,7 @@ interface NavbarProps {
   collapsed: boolean;
   onOpenNotifications: () => void;
   onOpenAIShortcut: () => void;
+  onToggleMobileMenu?: () => void;
   notifications: Notification[];
   onSearch?: (term: string) => void;
 }
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   collapsed,
   onOpenNotifications,
   onOpenAIShortcut,
+  onToggleMobileMenu,
   notifications,
   onSearch,
 }) => {
@@ -38,21 +40,31 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header
-      className={`fixed top-0 right-0 z-30 h-14 bg-white border-b border-[#E5E7EB] transition-all duration-200 ${
+      className={`fixed top-0 right-0 z-30 h-14 bg-white border-b border-[#E5E7EB] transition-all duration-200 left-0 md:${
         collapsed ? 'left-16' : 'left-60'
       }`}
     >
-      <div className="h-full px-5 flex items-center justify-between">
-        {/* Global Search Bar */}
-        <div className="relative w-72 max-w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={15} />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={handleSearchChange}
-            placeholder="Search records, invoices, clients..."
-            className="w-full pl-9 pr-3 py-1.5 bg-[#F8F9FA] border border-[#E5E7EB] rounded-md text-xs text-neutral-900 placeholder:text-neutral-400 focus:bg-white focus:border-teal-600 focus:outline-none transition"
-          />
+      <div className="h-full px-4 sm:px-5 flex items-center justify-between">
+        {/* Left Side: Mobile Menu Button + Search Bar */}
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          <button
+            onClick={onToggleMobileMenu}
+            className="md:hidden p-1.5 text-neutral-600 hover:text-neutral-900 rounded hover:bg-neutral-100 transition"
+            aria-label="Toggle navigation menu"
+          >
+            <Menu size={18} />
+          </button>
+
+          <div className="relative w-44 sm:w-72 max-w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={14} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={handleSearchChange}
+              placeholder="Search invoices, clients..."
+              className="w-full pl-8 sm:pl-9 pr-3 py-1.5 bg-[#F8F9FA] border border-[#E5E7EB] rounded-md text-xs text-neutral-900 placeholder:text-neutral-400 focus:bg-white focus:border-teal-600 focus:outline-none transition"
+            />
+          </div>
         </div>
 
         {/* Right Section Tools */}

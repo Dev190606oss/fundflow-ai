@@ -1,18 +1,25 @@
 export function formatCurrency(amount: number, currency: string = 'INR'): string {
-  if (isNaN(amount)) return '₹0';
+  if (isNaN(amount) || amount === null || amount === undefined) {
+    return currency === 'INR' ? '₹0' : '$0.00';
+  }
 
-  if (currency === 'INR') {
+  const cleanCurrency = currency?.toUpperCase() || 'INR';
+
+  if (cleanCurrency === 'INR') {
+    const hasDecimals = Math.abs(amount % 1) >= 0.01;
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
-      maximumFractionDigits: 0,
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: 2,
     }).format(amount);
   }
 
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: currency || 'USD',
-    maximumFractionDigits: 0,
+    currency: cleanCurrency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 

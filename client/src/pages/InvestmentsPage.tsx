@@ -13,9 +13,11 @@ import { investmentApi } from '../services/api';
 import { InvestmentOpportunity, SavingsGoal } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export const InvestmentsPage: React.FC = () => {
   const { currency } = useAuth();
+  const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<InvestmentOpportunity[]>([]);
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [readiness, setReadiness] = useState<any>(null);
@@ -66,9 +68,14 @@ export const InvestmentsPage: React.FC = () => {
     fetchData();
   }, []);
 
+  const [submittingOpp, setSubmittingOpp] = useState(false);
+  const [submittingGoal, setSubmittingGoal] = useState(false);
+  const [submittingDeposit, setSubmittingDeposit] = useState(false);
+
   const handleAddOpportunity = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setSubmittingOpp(true);
       await investmentApi.createOpportunity({
         companyName: oppName,
         category: oppCategory,
@@ -80,15 +87,19 @@ export const InvestmentsPage: React.FC = () => {
         isVerified: oppStatus === 'CONFIRMED',
       });
       setShowAddOppModal(false);
+      toast.success('Investment opportunity created successfully.');
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to create opportunity');
+      toast.error(err.message || 'Failed to create opportunity');
+    } finally {
+      setSubmittingOpp(false);
     }
   };
 
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setSubmittingGoal(true);
       await investmentApi.createGoal({
         title: goalTitle,
         targetAmount: Number(goalTargetAmount),
@@ -96,9 +107,12 @@ export const InvestmentsPage: React.FC = () => {
         targetDate: goalTargetDate,
       });
       setShowAddGoalModal(false);
+      toast.success('Savings goal created successfully.');
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to create savings goal');
+      toast.error(err.message || 'Failed to create savings goal');
+    } finally {
+      setSubmittingGoal(false);
     }
   };
 
@@ -106,6 +120,7 @@ export const InvestmentsPage: React.FC = () => {
     e.preventDefault();
     if (!selectedGoalForDeposit) return;
     try {
+      setSubmittingDeposit(true);
       await investmentApi.addContribution(selectedGoalForDeposit.id, {
         amount: Number(depositAmount),
         sourceNotes: depositNotes || 'Received client revenue allocation',
@@ -113,9 +128,12 @@ export const InvestmentsPage: React.FC = () => {
       setSelectedGoalForDeposit(null);
       setDepositAmount('');
       setDepositNotes('');
+      toast.success('Savings contribution recorded successfully.');
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to add savings');
+      toast.error(err.message || 'Failed to add savings');
+    } finally {
+      setSubmittingDeposit(false);
     }
   };
 

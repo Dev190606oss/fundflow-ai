@@ -114,3 +114,30 @@ code, pre {
   background-color: #F8F9FA;
   border-color: #D1D5DB;
 }
+
+/* Accessible focus ring for keyboard navigation (WCAG 2.2 AA) */
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #0D9488 !important;
+  outline-offset: 2px !important;
+}
+
+/* Print optimization for professional invoice stationery */
+@media print {
+  body {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+  }
+  aside, header, nav, button, .print\:hidden {
+    display: none !important;
+  }
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+  #printable-invoice {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+}

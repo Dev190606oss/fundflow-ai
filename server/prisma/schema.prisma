@@ -128,6 +128,7 @@ model Client {
   projects        Project[]
   invoices        Invoice[]
 
+  @@index([userId])
   @@map("clients")
 }
 
@@ -147,6 +148,8 @@ model Project {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  @@index([userId])
+  @@index([clientId])
   @@map("projects")
 }
 
@@ -173,6 +176,9 @@ model Invoice {
   items               InvoiceItem[]
   payments            Payment[]
 
+  @@index([userId, status])
+  @@index([clientId])
+  @@index([dueDate])
   @@map("invoices")
 }
 
@@ -186,6 +192,7 @@ model InvoiceItem {
   amount      Float    @default(0)
   createdAt   DateTime @default(now())
 
+  @@index([invoiceId])
   @@map("invoice_items")
 }
 
@@ -204,6 +211,8 @@ model Payment {
 
   paypalTransactions PayPalTransaction[]
 
+  @@index([userId])
+  @@index([invoiceId])
   @@map("payments")
 }
 
@@ -224,6 +233,7 @@ model PayPalTransaction {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  @@index([userId])
   @@map("paypal_transactions")
 }
 
@@ -239,6 +249,7 @@ model Transaction {
   referenceId String?         // Optional reference to invoice or loan
   createdAt   DateTime        @default(now())
 
+  @@index([userId, date])
   @@map("transactions")
 }
 
@@ -263,6 +274,7 @@ model Loan {
 
   repayments      LoanRepayment[]
 
+  @@index([userId, status])
   @@map("loans")
 }
 
@@ -275,6 +287,7 @@ model LoanRepayment {
   notes         String?
   createdAt     DateTime @default(now())
 
+  @@index([loanId])
   @@map("loan_repayments")
 }
 
@@ -302,6 +315,7 @@ model InvestmentOpportunity {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
+  @@index([userId])
   @@map("investment_opportunities")
 }
 
@@ -320,6 +334,7 @@ model SavingsGoal {
 
   contributions SavingsContribution[]
 
+  @@index([userId])
   @@map("savings_goals")
 }
 
@@ -332,6 +347,7 @@ model SavingsContribution {
   sourceNotes      String?
   createdAt        DateTime    @default(now())
 
+  @@index([goalId])
   @@map("savings_contributions")
 }
 
@@ -346,6 +362,7 @@ model Notification {
   link      String?
   createdAt DateTime         @default(now())
 
+  @@index([userId, isRead])
   @@map("notifications")
 }
 
@@ -359,6 +376,7 @@ model AIInsight {
   actionItems String?  // JSON or bullet points
   createdAt   DateTime @default(now())
 
+  @@index([userId])
   @@map("ai_insights")
 }
 

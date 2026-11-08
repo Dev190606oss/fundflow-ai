@@ -19,6 +19,7 @@ export const App: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
@@ -54,6 +55,8 @@ export const App: React.FC = () => {
         setActiveTab={setActiveTab}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
+        mobileOpen={mobileMenuOpen}
+        setMobileOpen={setMobileMenuOpen}
         unreadCount={unreadCount}
       />
 
@@ -62,12 +65,13 @@ export const App: React.FC = () => {
         collapsed={sidebarCollapsed}
         onOpenNotifications={() => setActiveTab('notifications')}
         onOpenAIShortcut={() => setActiveTab('ai-assistant')}
+        onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
         notifications={notifications}
       />
 
       {/* Main Content Area */}
       <main
-        className={`pt-14 min-h-screen transition-all duration-200 ${
+        className={`pt-14 min-h-screen transition-all duration-200 ml-0 md:${
           sidebarCollapsed ? 'ml-16' : 'ml-60'
         }`}
       >

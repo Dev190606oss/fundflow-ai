@@ -17,9 +17,11 @@ import { clientApi, aiApi } from '../services/api';
 import { Client } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export const ClientsPage: React.FC = () => {
   const { currency } = useAuth();
+  const { toast, confirmModal } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -71,19 +73,27 @@ export const ClientsPage: React.FC = () => {
         contractAmount: Number(contractAmount) || 0,
         deadline: deadline || null,
       });
+      toast.success('Client saved successfully!');
       setShowAddClient(false);
       resetForm();
       fetchClients();
     } catch (err: any) {
-      alert(err.message || 'Failed to save client');
+      toast.error(err.message || 'Failed to save client');
     }
   };
 
-  const handleDeleteClient = async (id: string) => {
-    if (confirm('Are you sure you want to delete this client and all associated data?')) {
-      await clientApi.delete(id);
-      fetchClients();
-    }
+  const handleDeleteClient = (id: string, clientName: string) => {
+    confirmModal({
+      title: 'Delete Client',
+      message: `Are you sure you want to delete ${clientName} and all associated invoices/projects? This action cannot be undone.`,
+      confirmText: 'Delete Client',
+      isDestructive: true,
+      onConfirm: async () => {
+        await clientApi.delete(id);
+        toast.success(`Client ${clientName} deleted successfully.`);
+        fetchClients();
+      },
+    });
   };
 
   const handleGenerateAIBrief = async () => {
@@ -95,8 +105,9 @@ export const ClientsPage: React.FC = () => {
         clientName: selectedClient?.name || 'Valued Client',
       });
       setGeneratedBrief(res);
+      toast.success('AI Project Brief generated successfully!');
     } catch (err: any) {
-      alert(err.message || 'Failed to generate brief');
+      toast.error(err.message || 'Failed to generate brief');
     } finally {
       setGeneratingBrief(false);
     }
@@ -116,9 +127,9 @@ export const ClientsPage: React.FC = () => {
       setShowAIBriefModal(false);
       setGeneratedBrief(null);
       fetchClients();
-      alert('Project brief attached to client successfully.');
+      toast.success('Project brief attached to client successfully.');
     } catch (err: any) {
-      alert(err.message || 'Failed to attach project');
+      toast.error(err.message || 'Failed to attach project');
     }
   };
 
@@ -257,7 +268,7 @@ export const ClientsPage: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => handleDeleteClient(client.id)}
+                  onClick={() => handleDeleteClient(client.id, client.name)}
                   className="p-1.5 text-[#737373] hover:text-rose-600 rounded transition"
                   title="Delete Client"
                 >

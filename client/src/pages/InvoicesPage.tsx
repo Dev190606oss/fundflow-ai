@@ -12,10 +12,12 @@ import { invoiceApi, clientApi } from '../services/api';
 import { Invoice, Client, InvoiceItem } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { PayPalPaymentModal } from '../components/PayPalPaymentModal';
 
 export const InvoicesPage: React.FC = () => {
   const { currency, user } = useAuth();
+  const { toast, confirmModal } = useToast();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,18 +97,26 @@ export const InvoicesPage: React.FC = () => {
         notes,
         items,
       });
+      toast.success('Invoice generated successfully!');
       setShowCreateModal(false);
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to create invoice');
+      toast.error(err.message || 'Failed to create invoice');
     }
   };
 
-  const handleDeleteInvoice = async (id: string) => {
-    if (confirm('Delete this invoice?')) {
-      await invoiceApi.delete(id);
-      fetchData();
-    }
+  const handleDeleteInvoice = (id: string, invoiceNumber: string) => {
+    confirmModal({
+      title: 'Delete Invoice',
+      message: `Are you sure you want to delete invoice ${invoiceNumber}? This action cannot be undone.`,
+      confirmText: 'Delete',
+      isDestructive: true,
+      onConfirm: async () => {
+        await invoiceApi.delete(id);
+        toast.success(`Invoice ${invoiceNumber} deleted successfully.`);
+        fetchData();
+      },
+    });
   };
 
   const filtered = invoices.filter((inv) => {
@@ -242,7 +252,7 @@ export const InvoicesPage: React.FC = () => {
                             <Eye size={14} />
                           </button>
                           <button
-                            onClick={() => handleDeleteInvoice(inv.id)}
+                            onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)}
                             className="p-1.5 text-[#737373] hover:text-rose-600 rounded hover:bg-[#F8F9FA]"
                             title="Delete Invoice"
                           >
