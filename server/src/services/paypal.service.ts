@@ -327,14 +327,33 @@ export class PayPalService {
       return { verified: false, error: 'Invalid PayPal webhook signature simulation.' };
     }
 
+    // Mock test hooks for testing external failure responses in sandbox
+    if (headers['x-mock-verify-status'] === 'FAILURE') {
+      return { verified: false, error: 'PayPal verification status: FAILURE' };
+    }
+    if (headers['x-mock-verify-status'] === '500') {
+      return { verified: false, error: 'PayPal signature verification endpoint returned HTTP 500.' };
+    }
+    if (headers['x-mock-verify-status'] === 'TIMEOUT') {
+      return { verified: false, error: 'Signature verification network timeout.' };
+    }
+
     const webhookId = process.env.PAYPAL_WEBHOOK_ID;
 
     // In production, missing credentials or missing PAYPAL_WEBHOOK_ID must fail closed
-    if (process.env.NODE_ENV === 'production' && (!this.isConfigured() || !webhookId)) {
-      return {
-        verified: false,
-        error: 'Missing required PayPal production credentials or PAYPAL_WEBHOOK_ID.',
-      };
+    if (process.env.NODE_ENV === 'production') {
+      if (!this.clientId) {
+        return { verified: false, error: 'Missing required PAYPAL_CLIENT_ID in production environment.' };
+      }
+      if (!this.clientSecret) {
+        return { verified: false, error: 'Missing required PAYPAL_CLIENT_SECRET in production environment.' };
+      }
+      if (!webhookId) {
+        return { verified: false, error: 'Missing required PAYPAL_WEBHOOK_ID in production environment.' };
+      }
+      if (!this.isConfigured()) {
+        return { verified: false, error: 'PayPal credentials invalid or set to placeholder values.' };
+      }
     }
 
     // If live/sandbox credentials and webhook ID are configured, verify with official PayPal API
@@ -395,41 +414,67 @@ export class PayPalService {
     if (!eventId) {
       throw new Error('Webhook event payload missing unique event ID.');
     }
+    const eventType = event?.event_type;
 
-    // 1. Persistent Replay Protection: Check if event is already in PostgreSQL
+    // 1. Persistent Replay Protection & Safe Crash/Failure Recovery Inspection
     const existingDbEvent = await prisma.processedWebhookEvent.findUnique({
       where: { id: eventId },
     });
 
     if (existingDbEvent) {
-      return {
-        processed: false,
-        status: 'DUPLICATE_IGNORED',
-        details: `Webhook event ${eventId} already processed (Database replay protection active).`,
-      };
-    }
+      const isFinalized = ['SETTLED', 'ALREADY_PAID', 'DENIED', 'UNDERPAYMENT_REJECTED', 'CURRENCY_MISMATCH_REJECTED'].includes(
+        existingDbEvent.status
+      );
 
-    const eventType = event.event_type;
-
-    // 2. Concurrency Lock: Atomically claim event ID in database via unique primary key constraint
-    try {
-      await prisma.processedWebhookEvent.create({
-        data: {
-          id: eventId,
-          eventType,
-          status: 'PROCESSING',
-        },
-      });
-    } catch (err: any) {
-      // P2002 = Prisma Unique constraint violation
-      if (err.code === 'P2002') {
+      if (isFinalized) {
         return {
           processed: false,
           status: 'DUPLICATE_IGNORED',
-          details: `Webhook event ${eventId} concurrent request intercepted by database unique constraint.`,
+          details: `Webhook event ${eventId} already finalized as ${existingDbEvent.status} (Database replay protection active).`,
         };
       }
-      throw err;
+
+      // Safe Recovery Check:
+      // Allow retry if previous attempt failed or was interrupted by a server crash/kill (> 60s ago)
+      const isStuckProcessing =
+        (existingDbEvent.status === 'PROCESSING' || existingDbEvent.status === 'PROCESSING_RETRY') &&
+        Date.now() - existingDbEvent.createdAt.getTime() > 60000;
+      const isFailed = existingDbEvent.status === 'FAILED';
+
+      if (!isStuckProcessing && !isFailed) {
+        return {
+          processed: false,
+          status: 'DUPLICATE_IGNORED',
+          details: `Webhook event ${eventId} is actively processing by another concurrent instance.`,
+        };
+      }
+
+      console.warn(`🔄 Recovering webhook event ${eventId} from prior ${existingDbEvent.status} state.`);
+      await prisma.processedWebhookEvent.update({
+        where: { id: eventId },
+        data: { status: 'PROCESSING_RETRY' },
+      });
+    } else {
+      // 2. Concurrency Lock: Atomically claim event ID in database via unique primary key constraint
+      try {
+        await prisma.processedWebhookEvent.create({
+          data: {
+            id: eventId,
+            eventType,
+            status: 'PROCESSING',
+          },
+        });
+      } catch (err: any) {
+        // P2002 = Prisma Unique constraint violation
+        if (err.code === 'P2002') {
+          return {
+            processed: false,
+            status: 'DUPLICATE_IGNORED',
+            details: `Webhook event ${eventId} concurrent request intercepted by database unique constraint.`,
+          };
+        }
+        throw err;
+      }
     }
 
     // 3. Handle Payment Denied / Failed / Canceled: Never mark as paid
@@ -536,25 +581,33 @@ export class PayPalService {
         };
       }
 
-      // Atomic settlement
-      await prisma.$transaction(async (tx) => {
-        await tx.invoice.update({
-          where: { id: invoice.id },
-          data: {
-            status: InvoiceStatus.PAID,
-            paidAmount: invoice.totalAmount,
-          },
+      // Atomic settlement: invoice update, client update, and webhook SETTLED status inside ONE transaction
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.invoice.update({
+            where: { id: invoice.id },
+            data: {
+              status: InvoiceStatus.PAID,
+              paidAmount: invoice.totalAmount,
+            },
+          });
+          await tx.client.update({
+            where: { id: invoice.clientId },
+            data: { paymentStatus: 'Paid' },
+          });
+          await tx.processedWebhookEvent.update({
+            where: { id: eventId },
+            data: { status: 'SETTLED' },
+          });
         });
-        await tx.client.update({
-          where: { id: invoice.clientId },
-          data: { paymentStatus: 'Paid' },
-        });
-      });
-
-      await prisma.processedWebhookEvent.update({
-        where: { id: eventId },
-        data: { status: 'SETTLED' },
-      });
+      } catch (settleErr) {
+        // If settlement failed, mark event as FAILED so subsequent PayPal retries can recover!
+        await prisma.processedWebhookEvent.update({
+          where: { id: eventId },
+          data: { status: 'FAILED' },
+        }).catch(() => {});
+        throw settleErr;
+      }
 
       return {
         processed: true,
