@@ -206,28 +206,55 @@ export class PayPalService {
         rawResponse = JSON.stringify(data);
         captureStatus = data.status;
 
-        const unit = data.purchase_units?.[0];
+        if (!data.purchase_units || data.purchase_units.length !== 1) {
+          throw new Error('PayPal capture response must contain exactly one purchase unit.');
+        }
+
+        const unit = data.purchase_units[0];
         const captureUnit = unit?.payments?.captures?.[0];
         if (!captureUnit || captureUnit.status !== 'COMPLETED') {
           throw new Error(`PayPal payment capture incomplete or missing. Status: ${captureUnit?.status || data.status}`);
         }
 
-        // Verify order belongs to the intended invoice
-        const returnedInvoiceId = captureUnit.custom_id || unit?.custom_id || unit?.reference_id;
-        if (returnedInvoiceId && returnedInvoiceId !== invoice.id) {
+        // Mandatory invoice association check: custom_id or reference_id MUST be present and match invoice.id
+        const returnedInvoiceId = captureUnit.custom_id || unit.custom_id || unit.reference_id;
+        if (!returnedInvoiceId) {
+          throw new Error('PayPal capture rejected: missing mandatory invoice association (custom_id / reference_id).');
+        }
+        if (returnedInvoiceId !== invoice.id) {
           throw new Error(`PayPal order mismatch: expected invoice ${invoice.id}, received ${returnedInvoiceId}`);
         }
 
-        // Verify captured amount and currency
-        const capturedAmount = parseFloat(captureUnit.amount?.value || '0');
-        const expectedUsd = balanceRemaining / 85;
+        // Mandatory amount and currency check
+        const capturedAmountStr = captureUnit.amount?.value;
         const capturedCurrency = captureUnit.amount?.currency_code;
+        if (!capturedAmountStr || !capturedCurrency) {
+          throw new Error('PayPal capture response missing amount or currency details.');
+        }
 
-        const isUsdMatch = capturedCurrency === 'USD' && capturedAmount >= Math.round(expectedUsd * 100) / 100;
-        const isDirectMatch = (capturedCurrency === 'INR' || capturedCurrency === invoice.client?.paymentStatus) && capturedAmount >= balanceRemaining;
+        const capturedAmount = parseFloat(capturedAmountStr);
+        if (isNaN(capturedAmount) || capturedAmount <= 0) {
+          throw new Error('Invalid capture amount received from PayPal.');
+        }
 
-        if (!isUsdMatch && !isDirectMatch) {
-          throw new Error(`Captured amount (${capturedAmount} ${capturedCurrency}) does not cover balance due (${balanceRemaining})`);
+        const expectedUsd = Math.round((balanceRemaining / 85) * 100) / 100;
+        const isUsdMatch = capturedCurrency === 'USD';
+        const isInrMatch = capturedCurrency === 'INR';
+
+        if (!isUsdMatch && !isInrMatch) {
+          throw new Error(`Unsupported currency code received: ${capturedCurrency}. Expected USD or INR.`);
+        }
+
+        const expectedTarget = isUsdMatch ? expectedUsd : balanceRemaining;
+
+        // Check for underpayment (Zero tolerance)
+        if (capturedAmount < expectedTarget) {
+          throw new Error(`Underpayment rejected: received ${capturedAmount} ${capturedCurrency}, expected ${expectedTarget} ${capturedCurrency}`);
+        }
+
+        // Check for overpayment (Explicit policy: reject payments exceeding outstanding balance)
+        if (capturedAmount > expectedTarget + 0.01) {
+          throw new Error(`Overpayment rejected: received ${capturedAmount} ${capturedCurrency}, which exceeds outstanding balance of ${expectedTarget} ${capturedCurrency}. Excess money cannot be silently discarded.`);
         }
 
         captureId = captureUnit.id;
@@ -252,85 +279,123 @@ export class PayPalService {
       throw new Error(`PayPal payment verification failed. Status received: ${captureStatus}`);
     }
 
-    // Execute atomic transaction for accounting consistency
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Record Payment
-      const payment = await tx.payment.create({
-        data: {
-          invoiceId: invoice.id,
-          userId,
-          amount: balanceRemaining,
-          paymentMethod: PaymentMethod.PAYPAL,
-          transactionId: captureId,
-          status: PaymentStatus.COMPLETED,
-          paidAt: new Date(),
-        },
+    // Execute atomic transaction for accounting consistency with concurrency idempotency
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Double check invoice has not been settled concurrently
+        const freshInvoice = await tx.invoice.findUnique({
+          where: { id: invoice.id },
+          include: { client: true },
+        });
+
+        if (freshInvoice && freshInvoice.status === InvoiceStatus.PAID) {
+          const existingCompletedTx = await tx.payPalTransaction.findUnique({
+            where: { orderId },
+            include: { payment: { include: { invoice: { include: { client: true, items: true } } } } },
+          });
+          if (existingCompletedTx) {
+            return {
+              payment: existingCompletedTx.payment,
+              updatedInvoice: existingCompletedTx.payment?.invoice || freshInvoice,
+            };
+          }
+        }
+
+        // 1. Record Payment
+        const payment = await tx.payment.create({
+          data: {
+            invoiceId: invoice.id,
+            userId,
+            amount: balanceRemaining,
+            paymentMethod: PaymentMethod.PAYPAL,
+            transactionId: captureId,
+            status: PaymentStatus.COMPLETED,
+            paidAt: new Date(),
+          },
+        });
+
+        // 2. Record PayPal transaction details
+        await tx.payPalTransaction.create({
+          data: {
+            userId,
+            paymentId: payment.id,
+            orderId,
+            captureId,
+            payerEmail,
+            payerId,
+            amount: balanceRemaining,
+            currency: 'INR',
+            status: 'COMPLETED',
+            rawResponse,
+          },
+        });
+
+        // 3. Update Invoice status & paidAmount
+        const updatedInvoice = await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: InvoiceStatus.PAID,
+            paidAmount: invoice.totalAmount,
+          },
+          include: { items: true, client: true },
+        });
+
+        // 4. Update client payment status
+        await tx.client.update({
+          where: { id: invoice.clientId },
+          data: { paymentStatus: 'Paid' },
+        });
+
+        // 5. Create Income Transaction
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: TransactionType.INCOME,
+            category: 'Freelance Payout',
+            description: `PayPal settlement for Invoice ${invoice.invoiceNumber} (${invoice.client.name})`,
+            amount: balanceRemaining,
+            referenceId: invoice.id,
+          },
+        });
+
+        // 6. Create Notification
+        await tx.notification.create({
+          data: {
+            userId,
+            type: NotificationType.PAYMENT_RECEIVED,
+            title: 'PayPal Payment Verified',
+            message: `Payment of ₹${invoice.totalAmount.toLocaleString('en-IN')} for ${invoice.invoiceNumber} captured successfully via PayPal (Capture: ${captureId}).`,
+            link: '/invoices',
+          },
+        });
+
+        return { payment, updatedInvoice };
       });
 
-      // 2. Record PayPal transaction details
-      await tx.payPalTransaction.create({
-        data: {
-          userId,
-          paymentId: payment.id,
-          orderId,
-          captureId,
-          payerEmail,
-          payerId,
-          amount: balanceRemaining,
-          currency: 'INR',
-          status: 'COMPLETED',
-          rawResponse,
-        },
-      });
-
-      // 3. Update Invoice status & paidAmount
-      const updatedInvoice = await tx.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          status: InvoiceStatus.PAID,
-          paidAmount: invoice.totalAmount,
-        },
-        include: { items: true, client: true },
-      });
-
-      // 4. Update client payment status
-      await tx.client.update({
-        where: { id: invoice.clientId },
-        data: { paymentStatus: 'Paid' },
-      });
-
-      // 5. Create Income Transaction
-      await tx.transaction.create({
-        data: {
-          userId,
-          type: TransactionType.INCOME,
-          category: 'Freelance Payout',
-          description: `PayPal settlement for Invoice ${invoice.invoiceNumber} (${invoice.client.name})`,
-          amount: balanceRemaining,
-          referenceId: invoice.id,
-        },
-      });
-
-      // 6. Create Notification
-      await tx.notification.create({
-        data: {
-          userId,
-          type: NotificationType.PAYMENT_RECEIVED,
-          title: 'PayPal Payment Verified',
-          message: `Payment of ₹${invoice.totalAmount.toLocaleString('en-IN')} for ${invoice.invoiceNumber} captured successfully via PayPal (Capture: ${captureId}).`,
-          link: '/invoices',
-        },
-      });
-
-      return { payment, updatedInvoice };
-    });
-
-    return {
-      success: true,
-      captureId,
-      status: 'COMPLETED',
-      invoice: result.updatedInvoice,
-    };
+      return {
+        success: true,
+        captureId,
+        status: 'COMPLETED',
+        invoice: result.updatedInvoice,
+      };
+    } catch (err: any) {
+      // Reconcile concurrent duplicate capture safely
+      if (err.code === 'P2002') {
+        const settledTx = await prisma.payPalTransaction.findUnique({
+          where: { orderId },
+          include: { payment: { include: { invoice: { include: { client: true, items: true } } } } },
+        });
+        if (settledTx && settledTx.status === 'COMPLETED') {
+          return {
+            success: true,
+            captureId: settledTx.captureId || captureId,
+            status: 'COMPLETED',
+            invoice: settledTx.payment?.invoice || invoice,
+          };
+        }
+      }
+      throw err;
+    }
   }
 
   // Standard sandbox exchange rate (or from process.env)

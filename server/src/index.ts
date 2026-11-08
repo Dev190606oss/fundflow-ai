@@ -92,10 +92,10 @@ app.use(
 // ==========================================
 // 4. Rate Limiting Protection
 // ==========================================
-// Global limiter to prevent DoS (150 requests per 15 minutes per IP)
+// Global limiter to prevent DoS (150 requests per 15 minutes per IP in production; elevated in development/testing)
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 150,
+  max: process.env.NODE_ENV === 'production' ? 150 : 3000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests from this IP. Please try again after 15 minutes.' },
@@ -105,7 +105,7 @@ app.use('/api/', globalLimiter);
 // Stricter limiter for authentication endpoints (prevents credential stuffing & brute-force)
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 10 : 100,
+  max: process.env.NODE_ENV === 'production' ? 10 : 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts. Please wait 15 minutes before retrying.' },
@@ -116,7 +116,7 @@ app.use('/api/auth/register', authLimiter);
 // Rate limiter for AI computation endpoints (prevents cost exhaustion & spam)
 const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: process.env.NODE_ENV === 'production' ? 30 : 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'AI request limit reached for this session. Please wait a few moments.' },

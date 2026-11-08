@@ -402,6 +402,130 @@ async function runAssessment() {
       `HTTP ${invalidCaptureTokenAttempt.status} (Unverified token rejected by capture engine)`
     );
 
+    // 4.12 Concurrency Test 1: Invoice Cancellation vs Payment Race Condition
+    const raceInvRes = await api('/invoices', {
+      method: 'POST',
+      headers: authHeadersA,
+      body: JSON.stringify({
+        clientId: clientAId,
+        dueDate: new Date(Date.now() + 86400000).toISOString(),
+        items: [{ description: 'Race Condition Test Invoice', quantity: 1, unitPrice: 1000 }],
+        taxRate: 0,
+        discountAmount: 0,
+      }),
+    });
+    const raceInvId = raceInvRes.body?.id;
+
+    // Fire simultaneous cancellation and payment requests
+    const [cancelRaceRes, payRaceRes] = await Promise.all([
+      api(`/invoices/${raceInvId}`, {
+        method: 'PUT',
+        headers: authHeadersA,
+        body: JSON.stringify({ status: 'CANCELLED' }),
+      }),
+      api(`/invoices/${raceInvId}/manual-payment`, {
+        method: 'POST',
+        headers: authHeadersA,
+        body: JSON.stringify({ amount: 500, paymentMethod: 'BANK_TRANSFER', reference: 'RacePay' }),
+      }),
+    ]);
+
+    const finalRaceInv = await prisma.invoice.findUnique({ where: { id: raceInvId } });
+    const racePrevented = !(finalRaceInv?.status === InvoiceStatus.CANCELLED && Number(finalRaceInv?.paidAmount) > 0);
+    record(
+      'OWASP CheatSheet',
+      'Concurrency Protection',
+      'Invoice cancellation race condition: Cancelled invoice never contains recorded payments',
+      racePrevented,
+      `Cancel HTTP ${cancelRaceRes.status}, Pay HTTP ${payRaceRes.status}, DB Status=${finalRaceInv?.status}, PaidAmount=${finalRaceInv?.paidAmount}`
+    );
+
+    // 4.13 Concurrency Test 2: Simultaneous Overpayment Prevention
+    const overInvRes = await api('/invoices', {
+      method: 'POST',
+      headers: authHeadersA,
+      body: JSON.stringify({
+        clientId: clientAId,
+        dueDate: new Date(Date.now() + 86400000).toISOString(),
+        items: [{ description: 'Concurrent Overpayment Test', quantity: 1, unitPrice: 1000 }],
+        taxRate: 0,
+        discountAmount: 0,
+      }),
+    });
+    const overInvId = overInvRes.body?.id;
+
+    // Fire two simultaneous payments of $600 for a $1000 invoice ($1200 total)
+    const [pay1Res, pay2Res] = await Promise.all([
+      api(`/invoices/${overInvId}/manual-payment`, {
+        method: 'POST',
+        headers: authHeadersA,
+        body: JSON.stringify({ amount: 600, paymentMethod: 'BANK_TRANSFER', reference: 'ConcurrentPay1' }),
+      }),
+      api(`/invoices/${overInvId}/manual-payment`, {
+        method: 'POST',
+        headers: authHeadersA,
+        body: JSON.stringify({ amount: 600, paymentMethod: 'BANK_TRANSFER', reference: 'ConcurrentPay2' }),
+      }),
+    ]);
+
+    const finalOverInv = await prisma.invoice.findUnique({
+      where: { id: overInvId },
+      include: { payments: true },
+    });
+    const overpaymentBlocked =
+      Number(finalOverInv?.paidAmount) === 600 &&
+      finalOverInv?.payments.length === 1 &&
+      ((pay1Res.status === 200 && pay2Res.status === 400) || (pay2Res.status === 200 && pay1Res.status === 400));
+    record(
+      'OWASP CheatSheet',
+      'Concurrency Protection',
+      'Simultaneous payments cannot overpay invoice ($600 + $600 on $1000 blocked)',
+      overpaymentBlocked,
+      `P1=${pay1Res.status}, P2=${pay2Res.status}, Recorded PaidAmount=$${finalOverInv?.paidAmount}, Payment Count=${finalOverInv?.payments.length}`
+    );
+
+    // 4.14 Concurrency Test 3: Simultaneous PayPal Capture Idempotency
+    const simInvRes = await api('/invoices', {
+      method: 'POST',
+      headers: authHeadersA,
+      body: JSON.stringify({
+        clientId: clientAId,
+        dueDate: new Date(Date.now() + 86400000).toISOString(),
+        items: [{ description: 'PayPal Capture Concurrency', quantity: 1, unitPrice: 500 }],
+        taxRate: 0,
+        discountAmount: 0,
+      }),
+    });
+    const simInvId = simInvRes.body?.id;
+    const simOrderId = `ORDER-SANDBOX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+
+    // Fire simultaneous capture requests for the exact same orderId
+    const [simCap1, simCap2] = await Promise.all([
+      api('/paypal/capture-order', {
+        method: 'POST',
+        headers: authHeadersA,
+        body: JSON.stringify({ invoiceId: simInvId, orderId: simOrderId }),
+      }),
+      api('/paypal/capture-order', {
+        method: 'POST',
+        headers: authHeadersA,
+        body: JSON.stringify({ invoiceId: simInvId, orderId: simOrderId }),
+      }),
+    ]);
+
+    const txRecords = await prisma.payPalTransaction.findMany({ where: { orderId: simOrderId } });
+    const captureAtomic =
+      simCap1.status === 200 &&
+      simCap2.status === 200 &&
+      txRecords.length === 1;
+    record(
+      'PayloadsAllTheThings',
+      'PayPal Concurrency',
+      'Simultaneous PayPal capture requests settled atomically with zero duplicate payments',
+      captureAtomic,
+      `Cap1=${simCap1.status}, Cap2=${simCap2.status}, Created PayPal Transactions=${txRecords.length}`
+    );
+
     // -----------------------------------------------------------------
     // SECTION 5: OWASP CHEATSHEET & SECLISTS — IDOR & TENANT ISOLATION
     // -----------------------------------------------------------------

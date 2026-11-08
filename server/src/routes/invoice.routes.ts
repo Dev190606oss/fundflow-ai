@@ -183,6 +183,37 @@ router.put(
         return;
       }
 
+      // If cancelling, execute atomic conditional update where paidAmount === 0 (Protects against concurrent payment race)
+      if (status === InvoiceStatus.CANCELLED) {
+        const updateResult = await prisma.invoice.updateMany({
+          where: {
+            id: existing.id,
+            userId: req.userId,
+            paidAmount: 0,
+            status: { notIn: [InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.CANCELLED] },
+          },
+          data: {
+            status: InvoiceStatus.CANCELLED,
+            ...(dueDate && { dueDate: new Date(dueDate) }),
+            ...(notes !== undefined && { notes: notes ? String(notes).trim() : null }),
+          },
+        });
+
+        if (updateResult.count === 0) {
+          res.status(400).json({
+            error: 'Invoice cannot be cancelled: a payment was recorded concurrently or invoice is already settled.',
+          });
+          return;
+        }
+
+        const updated = await prisma.invoice.findUnique({
+          where: { id: existing.id },
+          include: { client: true, items: true },
+        });
+        res.json(updated);
+        return;
+      }
+
       const updated = await prisma.invoice.update({
         where: { id: existing.id },
         data: {
@@ -229,26 +260,36 @@ router.post(
         return;
       }
 
-      const balanceDue = invoice.totalAmount - invoice.paidAmount;
-      if (paymentAmount > balanceDue) {
-        res.status(400).json({
-          error: `Payment amount (${paymentAmount}) exceeds the remaining balance due (${balanceDue}).`,
-        });
-        return;
-      }
-
-      const newPaidAmount = Math.round((invoice.paidAmount + paymentAmount) * 100) / 100;
-      let newStatus: InvoiceStatus = invoice.status;
-      if (newPaidAmount >= invoice.totalAmount) {
-        newStatus = InvoiceStatus.PAID;
-      } else if (newPaidAmount > 0) {
-        newStatus = InvoiceStatus.PARTIALLY_PAID;
-      }
-
       const result = await prisma.$transaction(async (tx) => {
+        // Acquire exclusive row-level lock on invoice to serialize concurrent payments
+        await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoice.id} FOR UPDATE`;
+
+        // Fetch fresh state inside transaction boundary to avoid race conditions
+        const freshInvoice = await tx.invoice.findUnique({
+          where: { id: invoice.id },
+          include: { client: true },
+        });
+
+        if (!freshInvoice || freshInvoice.status === InvoiceStatus.PAID || freshInvoice.status === InvoiceStatus.CANCELLED) {
+          throw new Error('Invoice cannot accept payments: already settled or cancelled.');
+        }
+
+        const freshBalanceDue = Math.round((freshInvoice.totalAmount - freshInvoice.paidAmount) * 100) / 100;
+        if (paymentAmount > freshBalanceDue) {
+          throw new Error(`Payment amount (${paymentAmount}) exceeds fresh remaining balance due (${freshBalanceDue}).`);
+        }
+
+        const newPaidAmount = Math.round((freshInvoice.paidAmount + paymentAmount) * 100) / 100;
+        let newStatus: InvoiceStatus = freshInvoice.status;
+        if (newPaidAmount >= freshInvoice.totalAmount) {
+          newStatus = InvoiceStatus.PAID;
+        } else if (newPaidAmount > 0) {
+          newStatus = InvoiceStatus.PARTIALLY_PAID;
+        }
+
         const payment = await tx.payment.create({
           data: {
-            invoiceId: invoice.id,
+            invoiceId: freshInvoice.id,
             userId: req.userId!,
             amount: paymentAmount,
             paymentMethod: (paymentMethod as PaymentMethod) || PaymentMethod.BANK_TRANSFER,
@@ -259,7 +300,7 @@ router.post(
         });
 
         const updatedInvoice = await tx.invoice.update({
-          where: { id: invoice.id },
+          where: { id: freshInvoice.id },
           data: {
             paidAmount: newPaidAmount,
             status: newStatus,
@@ -272,19 +313,18 @@ router.post(
             userId: req.userId!,
             type: TransactionType.INCOME,
             category: 'Freelance Payout',
-            description: `Direct payment for ${invoice.invoiceNumber} (${invoice.client.name})`,
+            description: `Direct payment for ${freshInvoice.invoiceNumber} (${freshInvoice.client.name})`,
             amount: paymentAmount,
-            referenceId: invoice.id,
+            referenceId: freshInvoice.id,
           },
         });
 
         return { payment, updatedInvoice };
       });
 
-      res.json(result);
-    } catch (error) {
-      console.error('Manual payment error:', error);
-      res.status(500).json({ error: 'Failed to record payment.' });
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'Failed to record manual payment.' });
     }
   }
 );
