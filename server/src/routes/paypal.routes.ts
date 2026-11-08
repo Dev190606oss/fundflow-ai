@@ -110,7 +110,8 @@ router.post('/webhook', async (req, res): Promise<void> => {
     }
 
     const result = await PayPalService.processWebhookEvent(req.body, {
-      simulateCrashDuringSettlement: req.headers['x-mock-crash-during-settlement'] === 'true',
+      simulateCrashDuringSettlement:
+        process.env.NODE_ENV !== 'production' && req.headers['x-mock-crash-during-settlement'] === 'true',
     });
     res.status(200).json(result);
   } catch (error: any) {

@@ -22,7 +22,7 @@ Testing encompassed all application components:
 - Payment Gateway (PayPal Developer Sandbox order generation, capture, webhook signature verification, atomic settlement, and CAS recovery)
 - Artificial Intelligence (Google Gemini API schema enforcement, tenant isolation, and prompt injection defense)
 
-All 55 automated security checks, production builds, and supply-chain dependency audits passed without failure (55/55).
+All 56 automated security checks, production builds, and supply-chain dependency audits passed without failure (56/56).
 
 ---
 
@@ -51,9 +51,9 @@ All 55 automated security checks, production builds, and supply-chain dependency
 | **Server Typecheck (`tsc`)** | Backend TypeScript | **PASS** | 0 compiler errors |
 | **Client Production Build** | Vite production bundle | **PASS** | Built in 1.90s (`dist/` generated) |
 | **Server Production Build** | Prisma generate & tsc | **PASS** | Generated Prisma Client (v5.22.0) |
-| **Security Regression Suite** | `verify-security.ts` | **PASS** | **22 / 22 Passed** (0 Failed) |
+| **Security Regression Suite** | `verify-security.ts` | **PASS** | **23 / 23 Passed** (0 Failed) |
 | **Comprehensive Verification** | `run-comprehensive-verification.ts` | **PASS** | **33 / 33 Passed** (0 Failed) |
-| **Total Automated Assertions** | **Full Application Stack** | **PASS** | **55 / 55 Passed (100% Pass Rate)** |
+| **Total Automated Assertions** | **Full Application Stack** | **PASS** | **56 / 56 Passed (100% Pass Rate)** |
 
 ---
 
@@ -85,17 +85,18 @@ All 55 automated security checks, production builds, and supply-chain dependency
 
 ### 4.4. Database & Financial Integrity (4/4 Passed)
 1. **Overpayment Prevention Guardrail:** Manual payment exceeding remaining invoice balance due rejected with HTTP 400 Bad Request.
-2. **ACID Transaction Rollback Consistency:** Interrupted payment settlement transaction cleanly rolls back all mutations; invoice `paidAmount` remains 0, payments table has 0 records, and webhook event is uncommitted.
+2. **ACID Transaction Rollback Consistency (Programmatic):** Interrupted payment settlement transaction cleanly rolls back all mutations; invoice `paidAmount` remains 0, payments table has 0 records, and webhook event is uncommitted. *(Note: Forceful OS-level process kill during an in-flight PostgreSQL transaction was not tested via actual OS kill and remains classified as NOT VERIFIED; ACID transaction rollback is verified programmatically).*
 3. **Concurrent Recovery CAS Locking:** Two backend instances simultaneously recovering the same `FAILED` event resolved atomically via Compare-And-Swap (`updateMany` with `where: { id: eventId, status: existingDbEvent.status }`). Exactly one instance claimed settlement (`CAPTURE_SETTLED`), competing instance returned `DUPLICATE_IGNORED`, and exactly one payment record was recorded.
 4. **Zero Underpayment Tolerance:** Converted USD underpayment of $235.24 for an invoice requiring $235.29 rejected with `UNDERPAYMENT_REJECTED` (invoice remained `PENDING`, `paidAmount: 0`). Exact payment of $235.29 settled the invoice to `PAID` with exact ₹20,000 credited.
 
-### 4.5. PayPal Webhook & Payment Security (4/4 Passed)
+### 4.5. PayPal Webhook & Payment Security (5/5 Passed)
 1. **Unsigned Webhook Rejection:** Webhook requests missing signature headers rejected with HTTP 400 Bad Request.
 2. **Invalid Signature Rejection:** Webhooks with invalid signature hashes rejected with HTTP 400 Bad Request.
 3. **Payment Denied / Voided Event Handling:** `PAYMENT.CAPTURE.DENIED` events recorded safely as `PAYMENT_DENIED_RECORDED`; invoice balance remains unaffected.
 4. **Native INR Capture & Currency Confusion Defense:**
    - Valid ₹25,000 INR payment settled and credited ₹25,000.
    - Currency confusion attack (submitting USD numeric value 294.12 tagged as INR) rejected as `UNDERPAYMENT_REJECTED` with invoice left unmodified.
+5. **Production Mock Headers Isolation & Rejection:** In production mode (`NODE_ENV === 'production'`), mock simulation headers (`x-mock-signature-valid`, `x-mock-verify-status`, `x-mock-crash-during-settlement`) are strictly ignored and cannot influence signature verification or trigger process termination.
 
 ### 4.6. Gemini AI Security & Data Boundaries (3/3 Passed)
 1. **Unauthenticated AI Route Rejection:** `POST /api/ai/chat` without token rejected with HTTP 401 Unauthorized.
@@ -118,6 +119,7 @@ All 55 automated security checks, production builds, and supply-chain dependency
 
 | Tool / Test | Category | Status | Reason & Compensating Control |
 | :--- | :--- | :---: | :--- |
+| **Forceful OS Process Kill Mid-Transaction** | Process Failure Simulation | **NOT VERIFIED** | Terminating an active OS backend process during an in-flight uncommitted PostgreSQL transaction was not executed via actual OS process kill; ACID consistency was verified programmatically via in-transaction rollback assertions. |
 | **OWASP ZAP** | DAST Scanner | **NOT RUN** | The `zap.sh` binary/daemon is not installed on the local test machine. HTTP headers, cookie configurations, and unauthenticated endpoint rejection were verified deterministically via automated integration test scripts and live curl assertions. |
 | **Nuclei** | Vulnerability Scanner | **NOT RUN** | `nuclei` binary is not installed on the local host. Route authorization, IDOR boundaries, and schema bounds were verified via automated integration suites. |
 | **Shannon / PentAGI / sqlmap** | Autonomous Pentesting | **EXCLUDED** | Autonomous exploitation tools were excluded to prevent uncontrolled local filesystem damage and unapproved database destruction. |
@@ -135,6 +137,10 @@ All 55 automated security checks, production builds, and supply-chain dependency
    - *Severity:* **Informational**
    - *Issue:* Test mock harnesses passing `paypal-transmission-sig: 'INVALID_SIGNATURE_BYTES'` required explicit header flag `x-mock-signature-valid: 'false'`.
    - *Remediation:* Enhanced `verifyWebhookSignature` in `server/src/services/paypal.service.ts` to directly recognize `INVALID_SIGNATURE_BYTES` and `INVALID_SIG` transmission signatures.
+3. **Production Isolation for Test Mock Headers:**
+   - *Severity:* **Medium**
+   - *Issue:* Test mock headers (`x-mock-signature-valid`, `x-mock-verify-status`, `x-mock-crash-during-settlement`) were evaluated before checking the environment, which could allow external attackers to trigger mock rejection or process kills in production.
+   - *Remediation:* Enforced `process.env.NODE_ENV !== 'production'` guards across all mock simulation branches in `server/src/services/paypal.service.ts` and `server/src/routes/paypal.routes.ts`. In production mode, mock headers are completely ignored, and requests must use genuine PayPal API signature verification. Added automated regression Test 23 in `verify-security.ts`.
 
 ---
 

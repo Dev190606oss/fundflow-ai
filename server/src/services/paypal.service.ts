@@ -322,29 +322,9 @@ export class PayPalService {
       return { verified: false, error: 'Missing required PayPal signature headers.' };
     }
 
-    // Explicit test/sandbox mock rejection for testing purposes
-    if (
-      headers['x-mock-signature-valid'] === 'false' ||
-      transmissionSig === 'INVALID_SIGNATURE_BYTES' ||
-      transmissionSig === 'INVALID_SIG'
-    ) {
-      return { verified: false, error: 'Invalid PayPal webhook signature simulation.' };
-    }
-
-    // Mock test hooks for testing external failure responses in sandbox
-    if (headers['x-mock-verify-status'] === 'FAILURE') {
-      return { verified: false, error: 'PayPal verification status: FAILURE' };
-    }
-    if (headers['x-mock-verify-status'] === '500') {
-      return { verified: false, error: 'PayPal signature verification endpoint returned HTTP 500.' };
-    }
-    if (headers['x-mock-verify-status'] === 'TIMEOUT') {
-      return { verified: false, error: 'Signature verification network timeout.' };
-    }
-
     const webhookId = process.env.PAYPAL_WEBHOOK_ID;
 
-    // In production, missing credentials or missing PAYPAL_WEBHOOK_ID must fail closed
+    // In production, strictly enforce genuine credentials and reject any test mocks
     if (process.env.NODE_ENV === 'production') {
       if (!this.clientId) {
         return { verified: false, error: 'Missing required PAYPAL_CLIENT_ID in production environment.' };
@@ -357,6 +337,25 @@ export class PayPalService {
       }
       if (!this.isConfigured()) {
         return { verified: false, error: 'PayPal credentials invalid or set to placeholder values.' };
+      }
+    } else {
+      // Non-production ONLY: Allow safe mock test hooks for integration test harnesses
+      if (
+        headers['x-mock-signature-valid'] === 'false' ||
+        transmissionSig === 'INVALID_SIGNATURE_BYTES' ||
+        transmissionSig === 'INVALID_SIG'
+      ) {
+        return { verified: false, error: 'Invalid PayPal webhook signature simulation.' };
+      }
+
+      if (headers['x-mock-verify-status'] === 'FAILURE') {
+        return { verified: false, error: 'PayPal verification status: FAILURE' };
+      }
+      if (headers['x-mock-verify-status'] === '500') {
+        return { verified: false, error: 'PayPal signature verification endpoint returned HTTP 500.' };
+      }
+      if (headers['x-mock-verify-status'] === 'TIMEOUT') {
+        return { verified: false, error: 'Signature verification network timeout.' };
       }
     }
 
@@ -686,8 +685,8 @@ export class PayPalService {
             });
           }
 
-          // Simulation hook: force crash during transaction right before commit
-          if (options?.simulateCrashDuringSettlement) {
+          // Simulation hook: force crash during transaction right before commit (strictly non-production only)
+          if (process.env.NODE_ENV !== 'production' && options?.simulateCrashDuringSettlement) {
             console.error('💥 [CRASH SIMULATION] Forcefully killing process mid-transaction via SIGKILL...');
             process.kill(process.pid, 'SIGKILL');
           }

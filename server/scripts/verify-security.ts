@@ -2,6 +2,7 @@ import 'dotenv/config';
 import prisma from '../src/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { PayPalService } from '../src/services/paypal.service';
 
 const API_BASE = 'http://localhost:5001/api';
 const JWT_SECRET = process.env.JWT_SECRET || 'fundflow_jwt_secret_dev_key_2026_paypal_hack';
@@ -700,6 +701,42 @@ async function runAudit() {
     }
   } catch (err: any) {
     assert('PayPal Financial Integrity', 'Webhook Currency Mismatch Rejection', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // Test 23: Production Webhook Mock Headers Isolation
+  // -------------------------------------------------------------
+  try {
+    const origEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+
+    const check = await PayPalService.verifyWebhookSignature({
+      headers: {
+        'x-mock-signature-valid': 'false',
+        'x-mock-verify-status': 'FAILURE',
+        'paypal-auth-algo': 'SHA256withRSA',
+        'paypal-cert-url': 'https://api.sandbox.paypal.com/v1/notifications/certs/CERT-123',
+        'paypal-transmission-id': 'TRANS-PROD-MOCK',
+        'paypal-transmission-sig': 'INVALID_SIGNATURE_BYTES',
+        'paypal-transmission-time': new Date().toISOString(),
+      },
+      body: {},
+    });
+
+    process.env.NODE_ENV = origEnv;
+
+    // In production, mock simulation must be ignored (error should NOT be the mock simulation text)
+    const mockIgnored = check.error !== 'Invalid PayPal webhook signature simulation.' &&
+                        check.error !== 'PayPal verification status: FAILURE';
+
+    assert(
+      'PayPal Webhook Security',
+      'Production Mock Headers Isolation & Rejection',
+      mockIgnored,
+      `In production mode, mock headers are ignored. Result error: "${check.error}"`
+    );
+  } catch (err: any) {
+    assert('PayPal Webhook Security', 'Production Mock Headers Isolation & Rejection', false, err.message);
   }
 
   // -------------------------------------------------------------
