@@ -30,7 +30,7 @@ router.post(
         return;
       }
 
-      const remainingToPay = invoice.totalAmount - invoice.paidAmount;
+      const remainingToPay = Math.round((invoice.totalAmount - invoice.paidAmount) * 100) / 100;
 
       const order = await PayPalService.createOrder({
         invoiceId: invoice.id,
@@ -38,6 +38,22 @@ router.post(
         amount: remainingToPay,
         currency: 'INR',
         description: `FundFlow AI - Invoice ${invoice.invoiceNumber} for ${invoice.client.name}`,
+      });
+
+      // Record created order in database to establish pre-capture order-to-invoice association
+      await prisma.payPalTransaction.create({
+        data: {
+          userId: req.userId!,
+          orderId: order.orderId,
+          amount: remainingToPay,
+          currency: 'INR',
+          status: 'CREATED',
+          rawResponse: JSON.stringify({
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            createdAt: new Date().toISOString(),
+          }),
+        },
       });
 
       res.json(order);
@@ -56,11 +72,13 @@ router.post(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { orderId, invoiceId } = req.body;
+      const simulateDbFailure = process.env.NODE_ENV !== 'production' && req.headers['x-simulate-db-failure'] === 'true';
 
       const result = await PayPalService.captureAndVerifyPayment({
         orderId,
         invoiceId,
         userId: req.userId!,
+        simulateDbFailureAfterCapture: simulateDbFailure,
       });
 
       res.json(result);

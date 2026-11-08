@@ -14,6 +14,7 @@
     "test:comprehensive": "tsx scripts/run-comprehensive-verification.ts",
     "test:e2e": "tsx scripts/run-e2e-workflows.ts",
     "test:advanced-security": "tsx scripts/run-advanced-security-assessment.ts",
+    "test:recovery": "tsx scripts/run-payment-recovery-verification.ts",
     "seed": "tsx prisma/seed.ts"
   },
   "keywords": [

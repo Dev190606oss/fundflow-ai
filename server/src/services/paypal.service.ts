@@ -30,6 +30,23 @@ export interface PayPalCaptureResponse {
 }
 
 export class PayPalService {
+  public static readonly FX_INR_TO_USD = 85.0;
+
+  // In-memory registry of externally completed PayPal sandbox captures (used for simulation and crash recovery testing)
+  public static externalSandboxCaptures = new Map<
+    string,
+    {
+      captureId: string;
+      orderId: string;
+      invoiceId: string;
+      amount: number;
+      currency: string;
+      status: 'COMPLETED';
+      payerEmail: string;
+      payerId: string;
+    }
+  >();
+
   private static clientId = process.env.PAYPAL_CLIENT_ID || '';
   private static clientSecret = process.env.PAYPAL_CLIENT_SECRET || '';
   private static apiBase = process.env.PAYPAL_API_BASE || 'https://api-m.sandbox.paypal.com';
@@ -141,15 +158,16 @@ export class PayPalService {
     orderId: string;
     invoiceId: string;
     userId: string;
+    simulateDbFailureAfterCapture?: boolean;
   }): Promise<{
     success: boolean;
     captureId: string;
     status: string;
     invoice: any;
   }> {
-    const { orderId, invoiceId, userId } = params;
+    const { orderId, invoiceId, userId, simulateDbFailureAfterCapture } = params;
 
-    // Check if invoice exists and belongs to user
+    // 1. Check if invoice exists and belongs to user
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, userId },
       include: { client: true },
@@ -159,19 +177,39 @@ export class PayPalService {
       throw new Error('Invoice not found or unauthorized.');
     }
 
-    // Idempotency Protection: Check if this PayPal order was already captured
-    const existingTx = await prisma.payPalTransaction.findUnique({
+    // 2. Pre-capture association & idempotency checks from local database
+    const trackedTx = await prisma.payPalTransaction.findUnique({
       where: { orderId },
       include: { payment: { include: { invoice: { include: { client: true, items: true } } } } },
     });
 
-    if (existingTx && existingTx.status === 'COMPLETED') {
-      return {
-        success: true,
-        captureId: existingTx.captureId || '',
-        status: 'COMPLETED',
-        invoice: existingTx.payment?.invoice || invoice,
-      };
+    if (trackedTx) {
+      // Must belong to the authenticated user
+      if (trackedTx.userId !== userId) {
+        throw new Error('Unauthorized: PayPal order belongs to a different user.');
+      }
+
+      // Check if already completed (Idempotent response)
+      if (trackedTx.status === 'COMPLETED') {
+        return {
+          success: true,
+          captureId: trackedTx.captureId || '',
+          status: 'COMPLETED',
+          invoice: trackedTx.payment?.invoice || invoice,
+        };
+      }
+
+      // If pre-tracked at creation, verify invoice association
+      if (trackedTx.rawResponse) {
+        try {
+          const meta = JSON.parse(trackedTx.rawResponse);
+          if (meta.invoiceId && meta.invoiceId !== invoice.id) {
+            throw new Error(`PayPal order mismatch: order was created for invoice ${meta.invoiceId}, cannot be captured for ${invoice.id}.`);
+          }
+        } catch (e: any) {
+          if (e.message && e.message.includes('PayPal order mismatch')) throw e;
+        }
+      }
     }
 
     if (invoice.status === InvoiceStatus.PAID) {
@@ -186,9 +224,12 @@ export class PayPalService {
 
     const balanceRemaining = Math.round((invoice.totalAmount - invoice.paidAmount) * 100) / 100;
 
+    // 3. Process with PayPal Live / Sandbox API
     if (this.isConfigured()) {
       try {
         const accessToken = await this.getAccessToken();
+        let captureData: PayPalCaptureResponse | null = null;
+
         const response = await fetch(`${this.apiBase}/v2/checkout/orders/${orderId}/capture`, {
           method: 'POST',
           headers: {
@@ -199,21 +240,39 @@ export class PayPalService {
 
         if (!response.ok) {
           const errText = await response.text();
-          throw new Error(`PayPal capture request rejected with status ${response.status}: ${errText}`);
+          // Check if order was already captured externally in PayPal (Recovery Scenario)
+          if (response.status === 422 && errText.includes('ORDER_ALREADY_CAPTURED')) {
+            const orderRes = await fetch(`${this.apiBase}/v2/checkout/orders/${orderId}`, {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+            });
+            if (orderRes.ok) {
+              const orderDetails = (await orderRes.json()) as PayPalCaptureResponse;
+              if (orderDetails.status === 'COMPLETED') {
+                captureData = orderDetails;
+              }
+            }
+          }
+          if (!captureData) {
+            throw new Error(`PayPal capture request rejected with status ${response.status}: ${errText}`);
+          }
+        } else {
+          captureData = (await response.json()) as PayPalCaptureResponse;
         }
 
-        const data = (await response.json()) as PayPalCaptureResponse;
-        rawResponse = JSON.stringify(data);
-        captureStatus = data.status;
+        rawResponse = JSON.stringify(captureData);
+        captureStatus = captureData.status;
 
-        if (!data.purchase_units || data.purchase_units.length !== 1) {
+        if (!captureData.purchase_units || captureData.purchase_units.length !== 1) {
           throw new Error('PayPal capture response must contain exactly one purchase unit.');
         }
 
-        const unit = data.purchase_units[0];
+        const unit = captureData.purchase_units[0];
         const captureUnit = unit?.payments?.captures?.[0];
         if (!captureUnit || captureUnit.status !== 'COMPLETED') {
-          throw new Error(`PayPal payment capture incomplete or missing. Status: ${captureUnit?.status || data.status}`);
+          throw new Error(`PayPal payment capture incomplete or missing. Status: ${captureUnit?.status || captureData.status}`);
         }
 
         // Mandatory invoice association check: custom_id or reference_id MUST be present and match invoice.id
@@ -237,7 +296,7 @@ export class PayPalService {
           throw new Error('Invalid capture amount received from PayPal.');
         }
 
-        const expectedUsd = Math.round((balanceRemaining / 85) * 100) / 100;
+        const expectedUsd = Math.round((balanceRemaining / this.FX_INR_TO_USD) * 100) / 100;
         const isUsdMatch = capturedCurrency === 'USD';
         const isInrMatch = capturedCurrency === 'INR';
 
@@ -258,8 +317,8 @@ export class PayPalService {
         }
 
         captureId = captureUnit.id;
-        if (data.payer?.email_address) payerEmail = data.payer.email_address;
-        if (data.payer?.payer_id) payerId = data.payer.payer_id;
+        if (captureData.payer?.email_address) payerEmail = captureData.payer.email_address;
+        if (captureData.payer?.payer_id) payerId = captureData.payer.payer_id;
       } catch (err: any) {
         throw new Error(`PayPal verification failed: ${err.message}`);
       }
@@ -271,7 +330,31 @@ export class PayPalService {
       if (!orderId.startsWith('ORDER-SANDBOX-')) {
         throw new Error('Invalid PayPal Sandbox order token format.');
       }
-      captureStatus = 'COMPLETED';
+
+      // Check external sandbox capture store for recovery
+      const existingExternal = this.externalSandboxCaptures.get(orderId);
+      if (existingExternal) {
+        if (existingExternal.invoiceId !== invoice.id) {
+          throw new Error(`PayPal order mismatch: order was already associated with invoice ${existingExternal.invoiceId}, cannot capture for ${invoice.id}.`);
+        }
+        captureId = existingExternal.captureId;
+        payerEmail = existingExternal.payerEmail;
+        payerId = existingExternal.payerId;
+        captureStatus = existingExternal.status;
+      } else {
+        // Record external capture in simulator store
+        this.externalSandboxCaptures.set(orderId, {
+          captureId,
+          orderId,
+          invoiceId: invoice.id,
+          amount: balanceRemaining,
+          currency: 'INR',
+          status: 'COMPLETED',
+          payerEmail,
+          payerId,
+        });
+        captureStatus = 'COMPLETED';
+      }
     }
 
     // Strictly verify status before marking as completed
@@ -279,34 +362,62 @@ export class PayPalService {
       throw new Error(`PayPal payment verification failed. Status received: ${captureStatus}`);
     }
 
-    // Execute atomic transaction for accounting consistency with concurrency idempotency
+    // Failure Injection Hook: If simulation requested, crash BEFORE database transaction commits
+    if (simulateDbFailureAfterCapture) {
+      throw new Error('SIMULATED_DB_FAILURE_AFTER_CAPTURE: Simulated database disconnect during transaction settlement.');
+    }
+
+    // 4. Execute atomic transaction with row locking for financial consistency
     try {
       const result = await prisma.$transaction(async (tx) => {
+        // Acquire exclusive row-level lock on the invoice to serialize concurrent payments and captures
+        await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoice.id} FOR UPDATE`;
+
         // Double check invoice has not been settled concurrently
         const freshInvoice = await tx.invoice.findUnique({
           where: { id: invoice.id },
           include: { client: true },
         });
 
-        if (freshInvoice && freshInvoice.status === InvoiceStatus.PAID) {
-          const existingCompletedTx = await tx.payPalTransaction.findUnique({
-            where: { orderId },
-            include: { payment: { include: { invoice: { include: { client: true, items: true } } } } },
-          });
-          if (existingCompletedTx) {
-            return {
-              payment: existingCompletedTx.payment,
-              updatedInvoice: existingCompletedTx.payment?.invoice || freshInvoice,
-            };
-          }
+        if (!freshInvoice) {
+          throw new Error('Invoice not found.');
         }
+
+        if (freshInvoice.status === InvoiceStatus.CANCELLED) {
+          throw new Error('Invoice is cancelled and cannot accept payments.');
+        }
+
+        // Check if this specific order was already settled
+        const existingCompletedTx = await tx.payPalTransaction.findUnique({
+          where: { orderId },
+          include: { payment: { include: { invoice: { include: { client: true, items: true } } } } },
+        });
+
+        if (existingCompletedTx && existingCompletedTx.status === 'COMPLETED') {
+          return {
+            payment: existingCompletedTx.payment,
+            updatedInvoice: existingCompletedTx.payment?.invoice || freshInvoice,
+          };
+        }
+
+        // If invoice is already paid by another payment method / order, reject this one
+        if (freshInvoice.status === InvoiceStatus.PAID) {
+          throw new Error('This invoice has already been fully paid and settled by another payment.');
+        }
+
+        const freshBalanceRemaining = Math.round((freshInvoice.totalAmount - freshInvoice.paidAmount) * 100) / 100;
+        if (freshBalanceRemaining <= 0) {
+          throw new Error('Invoice has no outstanding balance.');
+        }
+
+        const settleAmount = Math.min(balanceRemaining, freshBalanceRemaining);
 
         // 1. Record Payment
         const payment = await tx.payment.create({
           data: {
             invoiceId: invoice.id,
             userId,
-            amount: balanceRemaining,
+            amount: settleAmount,
             paymentMethod: PaymentMethod.PAYPAL,
             transactionId: captureId,
             status: PaymentStatus.COMPLETED,
@@ -314,16 +425,27 @@ export class PayPalService {
           },
         });
 
-        // 2. Record PayPal transaction details
-        await tx.payPalTransaction.create({
-          data: {
+        // 2. Upsert PayPal transaction details (updates CREATED record to COMPLETED or creates fresh)
+        await tx.payPalTransaction.upsert({
+          where: { orderId },
+          create: {
             userId,
             paymentId: payment.id,
             orderId,
             captureId,
             payerEmail,
             payerId,
-            amount: balanceRemaining,
+            amount: settleAmount,
+            currency: 'INR',
+            status: 'COMPLETED',
+            rawResponse,
+          },
+          update: {
+            paymentId: payment.id,
+            captureId,
+            payerEmail,
+            payerId,
+            amount: settleAmount,
             currency: 'INR',
             status: 'COMPLETED',
             rawResponse,
@@ -331,11 +453,14 @@ export class PayPalService {
         });
 
         // 3. Update Invoice status & paidAmount
+        const newPaidAmount = Math.round((freshInvoice.paidAmount + settleAmount) * 100) / 100;
+        const newStatus = newPaidAmount >= freshInvoice.totalAmount ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
+
         const updatedInvoice = await tx.invoice.update({
           where: { id: invoice.id },
           data: {
-            status: InvoiceStatus.PAID,
-            paidAmount: invoice.totalAmount,
+            status: newStatus,
+            paidAmount: newPaidAmount,
           },
           include: { items: true, client: true },
         });
@@ -343,7 +468,7 @@ export class PayPalService {
         // 4. Update client payment status
         await tx.client.update({
           where: { id: invoice.clientId },
-          data: { paymentStatus: 'Paid' },
+          data: { paymentStatus: newStatus === InvoiceStatus.PAID ? 'Paid' : 'Partially Paid' },
         });
 
         // 5. Create Income Transaction
@@ -353,7 +478,7 @@ export class PayPalService {
             type: TransactionType.INCOME,
             category: 'Freelance Payout',
             description: `PayPal settlement for Invoice ${invoice.invoiceNumber} (${invoice.client.name})`,
-            amount: balanceRemaining,
+            amount: settleAmount,
             referenceId: invoice.id,
           },
         });
@@ -364,7 +489,7 @@ export class PayPalService {
             userId,
             type: NotificationType.PAYMENT_RECEIVED,
             title: 'PayPal Payment Verified',
-            message: `Payment of ₹${invoice.totalAmount.toLocaleString('en-IN')} for ${invoice.invoiceNumber} captured successfully via PayPal (Capture: ${captureId}).`,
+            message: `Payment of ₹${settleAmount.toLocaleString('en-IN')} for ${invoice.invoiceNumber} captured successfully via PayPal (Capture: ${captureId}).`,
             link: '/invoices',
           },
         });
